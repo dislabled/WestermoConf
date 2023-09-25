@@ -1,0 +1,24 @@
+<doc>
+Ethernet ----------------------------------------------------------------------
+Port    Link Type          Speed      State      Alarm   VID  MAC Address      
+===============================================================================
+Eth 1    DIS NO-SFP        ---------- ----------   N/A     1  00:11:b4:5e:e0:81
+Eth 2    DIS NO-SFP        ---------- ----------   N/A     1  00:11:b4:5e:e0:82
+Eth 3   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:83
+Eth 4   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:84
+Eth 5   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:85
+Eth 6   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:86
+Eth 7   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:87
+Eth 8   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:88
+Eth 9   DOWN 10/100TX      ---------- ----------   N/A     1  00:11:b4:5e:e0:89
+Eth 10    UP 10/100TX      100M-Full  Forwarding   N/A     1  00:11:b4:5e:e0:8a
+
+
+old:
+{{ ignore }} {{ port | to_int() }}   {{ link }} {{ type }}          {{ speed }}      {{ state }}      {{ alarm }}   {{ vlan_id | to_int() }}  {{ mac_address | to_str() }} 
+</doc>
+
+<group>
+=============================================================================== {{ _start_ }}
+port    link type          speed      state      alarm   vid  mac_address      {{ _headers_}}
+</group>

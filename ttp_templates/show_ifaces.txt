@@ -1,0 +1,47 @@
+<doc>
+example input:
+"""
+
+Interface Name    Oper  Address/Length      MTU    MAC/PtP Address
+----------------  ----  ------------------  -----  ---------------------------
+lo                UP    127.0.0.1/8         16436  N/A              
+vlan1             UP    192.168.2.200/24    1500   00:11:b4:5e:e0:81
+                        169.254.234.22/16
+------------------------------------------------------------------------------
+"""
+
+example output:
+"""
+[
+    {
+        "ifaces": [
+            {
+                "iface_name": "lo",
+                "mac": "N/A",
+                "mtu": 16436,
+                "operation": "UP",
+                "primary_ip": "127.0.0.1/8"
+            },
+            {
+                "iface_name": "vlan1",
+                "mac": "00:11:b4:5e:e0:81",
+                "mtu": 1500,
+                "operation": "UP",
+                "primary_ip": "192.168.2.200/24",
+                "secondary_ip": "169.254.234.22/16"
+            }
+        ]
+    }
+]
+"""
+
+
+</doc>
+
+
+
+<group>
+{{ iface_name }} {{ operation }} {{ primary_ip | is_ip }}/{{ cidr }} {{ mtu | to_int }} {{ mac }}
+                        {{ secondary_ip | is_ip }}
+</group>
+

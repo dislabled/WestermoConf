@@ -1,0 +1,11 @@
+
+<doc>
+No Trigger          Ena Act Reason                        
+===============================================================================
+ 1 link-alarm       YES YES Port 1,4-5 DOWN                                   
+ 2 link-alarm       YES YES Port 6 DOWN
+</doc>
+
+ <group>
+ {{ id | to_int() }} {{ trigger }}          {{ enabled }} {{ active }} {{ ignore }} {{ port | unrange('-', ',') | split(',') }} {{ state }}
+</group>

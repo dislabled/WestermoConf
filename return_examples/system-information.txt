@@ -1,0 +1,44 @@
+lynx:/#> system-information 
+
+System Information
+===============================================================================
+
+System Name        : lynx
+System Contact     : 
+System Location    : 
+System Timezone    : Etc/UTC
+
+Product Family     : Lynx              Model              : L110-F2G           
+Architecture       : mxc               Base MAC Address   : 00:11:b4:5e:e0:80
+Platform           : Basis             Class              : Standard
+Article number     : 3649-0241-007     Serial Number      : 4191    
+Boot loader ver.   : 2017.12.0-10      Active firmware    : Main
+Main firmware ver. : 4.32.3            Backup firmware ver: 4.32.3          
+Manufacturing date : Jun 28, 2023     
+
+Card #1  ======================================================================
+Type               : CPU
+Chipset            : MV88E6097 r2
+Article no         : 5011-1120
+Revision           : 4
+Batch id           : 230628-90144007-00127
+Channel interfaces : 1
+Bandwidth limit    : Disabled (for CPU channels)
+USB                : N/A
+Flash              : Gen2
+Transceivers       :
+
+Port    Type        Speed  Article No.  Rev.  Serial No.        Label          
+-------------------------------------------------------------------------------
+Eth 1   No SFP
+Eth 2   No SFP
+
+Card #2  ======================================================================
+Type               : POWER
+Chipset            : N/A 
+Article no         : 5011-1020
+Revision           : 2
+Batch id           : 230704-90146291-00222
+
+lynx:/#> 
+

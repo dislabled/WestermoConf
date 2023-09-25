@@ -1,0 +1,11 @@
+lynx:/#> show ifaces
+Press Ctrl-C or Q(uit) to quit viewer, Space for next page, <CR> for next line.
+
+Interface Name    Oper  Address/Length      MTU    MAC/PtP Address
+----------------  ----  ------------------  -----  ---------------------------
+lo                UP    127.0.0.1/8         16436  N/A              
+vlan1             UP    192.168.2.200/24    1500   00:11:b4:5e:e0:81
+                        169.254.232.177/16
+------------------------------------------------------------------------------
+
+lynx:/#> 

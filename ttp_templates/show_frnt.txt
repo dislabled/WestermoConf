@@ -1,0 +1,17 @@
+<doc>
+example:
+                       Top
+ Rid  Ver   Status     Cnt   Mode       Port 1               Port 2
+===============================================================================
+   1   0    Broken       0   Member     Eth 1 Down           Eth 2 Down
+-------------------------------------------------------------------------------
+</doc>
+
+
+
+
+<group>
+{{ignore}}
+ r_id ver status     count   mode       port_1               port_2 {{ _headers_ | columns(7)}}
+</group>
+

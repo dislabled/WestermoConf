@@ -1,0 +1,12 @@
+System Name        : {{ system_name }}
+System Contact     : {{ system_contact }}
+System Location    : {{ system_location }}
+System Timezone    : {{ system_timezone }}
+
+Product Family     : {{ hw_family }}              Model              : {{ hw_model }}
+Architecture       : {{ hw_arch }}               Base MAC Address   : {{ system_mac }}
+Article number     : {{ hw_article_no }}        Serial Number      : {{ hw_serial }}    
+Boot loader ver.   : {{ hw_bootloarder_ver }}      Active firmware    : {{ active_fw }}
+Main firmware ver. : {{ system_firmware}}            Backup firmware ver: {{ system_backup_fw }}
+Manufacturing date : {{ hw_dom }}
+
