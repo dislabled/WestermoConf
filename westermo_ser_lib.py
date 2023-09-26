@@ -66,7 +66,7 @@ class Westermo:
         return return_values[0]
 
 
-    def get_mgmt_ip(self) -> list|dict:
+    def get_mgmt_ip(self) -> list[dict]:
         """ Gets current management ip info
         """
         ip_mgmt_info = self.conn.send_command('show ifaces')
@@ -76,7 +76,7 @@ class Westermo:
         return return_values[0]
 
 
-    def get_ports(self) -> list|dict:
+    def get_ports(self) -> list[dict]:
         """ Gets status of ports, and returns it as a list|dict.
 
         Returns:
@@ -126,30 +126,33 @@ class Westermo:
         self.vprint('set_focal function: member')
 
 
-    def set_alarm(self, alarm:list[int]) -> None:
+    def set_alarm(self, alarm:list[bool]) -> None:
         """ Configures alarm when link down for interfaces in list.
 
-        value == 1 is alarm on
+        value == True is alarm on
 
         Args:
             alarm (list): interfaces with alarm on or off
         """
         port_list = ''
-        for i, v in enumerate(alarm):
-            if not i:
-                port_list = str(v)
+        for cnt, val in enumerate(alarm):
+            if cnt <= 0:
+                if val is True:
+                    port_list = str(cnt + 1)
             else:
-                port_list += ',' + str(v)
+                if val is True:
+                    port_list += ',' + str(cnt + 1)
 
         self.conn.send_config('alarm no action 1') # unset alarmaction 1
         self.conn.send_config('alarm no trigger 1') # unset alarmtrigger 1
         self.conn.send_config(
             f'alarm trigger 1 link-alarm condition low port {port_list}')
         self.conn.send_config('alarm action 1 target led,log,digout')
+        self.vprint(alarm)
         self.vprint(f'set_alarm function: set alarm on ifaces {port_list} ON')
 
 
-    def set_mgmt_ip(self, ip_add:str) -> None:
+    def set_mgmt_ip(self, ip_add:str) -> bool:
         """ Changes the management ip-address of the switch to (ip)
 
         Args:
@@ -160,9 +163,14 @@ class Westermo:
         try:
             ip_address(ip_add)
         except ValueError:
-            pass
-        self.conn.send_config(f'iface vlan1 inet static address {ip_add}/24')
+            return False
+        # self.conn.send_interactive(
+        #                         [('iface vlan1 inet static no address secondary'
+        #                           ,'=> Are you sure (y/N)?', False),
+        #                          ('y', '', False)])
+        # self.conn.send_config(f'iface vlan1 inet static address {ip_add}/24 secondary')
         self.vprint(f'set_mgmt_ip function: setting vlan1 to {ip_add}')
+        return True
 
     def set_hostname(self, hostname:str) -> None:
         """ Changes the hostname of the switch
@@ -180,8 +188,12 @@ class Westermo:
         Args:
             location (str): location string to switch to
         """
-        self.conn.send_config(f'system location {location}')
-        self.vprint(f'set_location function: set to: {location}')
+        if location == '':
+            self.conn.send_config('no system location')
+            self.vprint('set_location function: removing location')
+        else:
+            self.conn.send_config(f'system location {location}')
+            self.vprint(f'set_location function: set to: {location}')
 
 
     def factory_conf(self) -> None:
@@ -189,7 +201,7 @@ class Westermo:
         """
         self.conn.send_interactive(
                                 [('factory-reset' ,'=> Are you sure (y/N)?', False),
-                                 ('y', False)])
+                                 ('y', '', False)])
         self.vprint('factory_conf function: Factory defaults set')
 
 
@@ -268,7 +280,7 @@ if __name__ == "__main__":
     with Westermo(verbose=True, **SWITCH) as switch:
         # switch.get_sysinfo()
         # switch.get_uptime()
-         #switch.get_ports()
+        switch.get_ports()
         # switch.save_config()
         # switch.compare_config()
         # switch.set_alarm(alarms)
@@ -279,5 +291,5 @@ if __name__ == "__main__":
         # switch.factory_conf()
         # switch.set_frtn()
         # switch.set_focal()
-        switch.save_run2startup()
+        # switch.save_run2startup()
         input()

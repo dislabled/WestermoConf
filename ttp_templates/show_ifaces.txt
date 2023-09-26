@@ -41,7 +41,7 @@ example output:
 
 
 <group>
-{{ iface_name }} {{ operation }} {{ primary_ip | is_ip }}/{{ cidr }} {{ mtu | to_int }} {{ mac }}
-                        {{ secondary_ip | is_ip }}
+{{ iface_name }} {{ operation }} {{ primary_ip | is_ip }}/{{ pri_cidr }} {{ mtu | to_int }} {{ mac }}
+                        {{ secondary_ip | is_ip }}/{{ sec_cidr }}
 </group>
 

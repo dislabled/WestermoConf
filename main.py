@@ -3,17 +3,14 @@
 """
 A GUI configurator for Westermo weos switches
 """
-import tkinter as tk
-import os
 import sys
-from tkinter import messagebox as mb
+import tkinter as tk
+from tkinter import BooleanVar, messagebox as mb
 from tkinter import filedialog as fd
 from tkinter import ttk
-from threading import Thread
 from westermo_ser_lib import Westermo
 from csv_lib import ConfigFile
 
-# switch = Westermo()
 
 class WestermoGUI(tk.Tk):
     """ Root window for Westermo configurator
@@ -40,7 +37,6 @@ class WestermoGUI(tk.Tk):
         """
         self.config(cursor='watch')
         frame = self.frames[cont]
-        # frame.update()
         frame.tkraise()
         frame.refresh()
         self.config(cursor='')
@@ -58,10 +54,10 @@ class MainPage(tk.Frame):
         self.frame2 = tk.Frame(self)    # Buttons
         self.frame2.grid(row=1, column=0,  sticky='s', padx=3, pady=5)
 
-        self.alobjports = [tk.BooleanVar(), tk.BooleanVar(), tk.BooleanVar(),
-                           tk.BooleanVar(), tk.BooleanVar(), tk.BooleanVar(),
-                           tk.BooleanVar(), tk.BooleanVar(),
-                           tk.BooleanVar(), tk.BooleanVar()]
+        self.alobjports = [BooleanVar(), BooleanVar(), BooleanVar(),
+                           BooleanVar(), BooleanVar(), BooleanVar(),
+                           BooleanVar(), BooleanVar(),
+                           BooleanVar(), BooleanVar()]
 
         tk.Label(self.frame0, text='Name: ').grid(row=0, column=0,
                                                 sticky='w', padx=5, pady=1)
@@ -103,35 +99,45 @@ class MainPage(tk.Frame):
         self.upd_btn3.grid(row=7, column=2)
 
         tk.Label(self.frame1, text='Ports:').grid(row=0, column=0, columnspan=4)
-        self.port_1 = tk.Checkbutton(self.frame1, text='1', variable=self.alobjports[0],
-                command=lambda: self.p_refresh())
+        self.port_1 = tk.Checkbutton(self.frame1, text='1',
+                                     variable=self.alobjports[0],
+                                     command=lambda: self.p_refresh())
         self.port_1.grid(row=5, column=1, padx=0)
-        self.port_2 = tk.Checkbutton(self.frame1, text='2', variable=self.alobjports[1],
+        self.port_2 = tk.Checkbutton(self.frame1, text='2',
+                                     variable=self.alobjports[1],
                 command=lambda: self.p_refresh())
         self.port_2.grid(row=5, column=3, padx=0)
-        self.port_3 = tk.Checkbutton(self.frame1, text='3', variable=self.alobjports[2],
+        self.port_3 = tk.Checkbutton(self.frame1, text='3',
+                                     variable=self.alobjports[2],
                 command=lambda: self.p_refresh())
         self.port_3.grid(row=4, column=1, padx=0)
-        self.port_4 = tk.Checkbutton(self.frame1, text='4', variable=self.alobjports[3],
+        self.port_4 = tk.Checkbutton(self.frame1, text='4',
+                                     variable=self.alobjports[3],
                 command=lambda: self.p_refresh())
         self.port_4.grid(row=4, column=3, padx=0)
-        self.port_5 = tk.Checkbutton(self.frame1, text='5', variable=self.alobjports[4],
+        self.port_5 = tk.Checkbutton(self.frame1, text='5',
+                                     variable=self.alobjports[4],
                 command=lambda: self.p_refresh())
         self.port_5.grid(row=3, column=1, padx=0)
-        self.port_6 = tk.Checkbutton(self.frame1, text='6', variable=self.alobjports[5],
+        self.port_6 = tk.Checkbutton(self.frame1, text='6',
+                                     variable=self.alobjports[5],
                 command=lambda: self.p_refresh())
         self.port_6.grid(row=3, column=3, padx=0)
-        self.port_7 = tk.Checkbutton(self.frame1, text='7', variable=self.alobjports[6],
+        self.port_7 = tk.Checkbutton(self.frame1, text='7',
+                                     variable=self.alobjports[6],
                 command=lambda: self.p_refresh())
         self.port_7.grid(row=2, columnspan=4, padx=0)
-        self.port_8 = tk.Checkbutton(self.frame1, text='8', variable=self.alobjports[7],
+        self.port_8 = tk.Checkbutton(self.frame1, text='8',
+                                     variable=self.alobjports[7],
                 command=lambda: self.p_refresh())
         self.port_8.grid(row=1, columnspan=4, padx=0)
-        self.port_9 = tk.Checkbutton(self.frame1, text='9', variable=self.alobjports[8],
-                command=lambda: self.p_refresh())
+        self.port_9 = tk.Checkbutton(self.frame1, text='9',
+                                     variable=self.alobjports[8],
+                                     command=lambda: self.p_refresh())
         self.port_9.grid(row=1, columnspan=4, padx=0)
-        self.port_10 = tk.Checkbutton(self.frame1, text='10', variable=self.alobjports[9],
-                command=lambda: self.p_refresh())
+        self.port_10 = tk.Checkbutton(self.frame1, text='10',
+                                      variable=self.alobjports[9],
+                                      command=lambda: self.p_refresh())
         self.port_10.grid(row=1, columnspan=4, padx=0)
 
         button1 = tk.Button(self.frame2, text="download config",
@@ -158,7 +164,7 @@ class MainPage(tk.Frame):
         templist = []
         for port in self.alobjports:
             templist.append(port.get())
-        switch.conf_iface(templist)
+        switch.set_alarm(templist)
         self.refresh()
 
     def portcolor(self) -> list:
@@ -223,22 +229,25 @@ class MainPage(tk.Frame):
         # Read new values
         self.system = switch.get_sysinfo()
         self.uptime = switch.get_uptime()
-        self.portlist = switch.get_ports()
-        self.alintports = []
-        self.stintports = []
+        self.portlist: list[dict[str, str]] = switch.get_ports()
+        self.alintports: list[bool] = []
+        self.stintports: list[bool] = []
         for val in self.portlist:
-            self.alintports.append(val['alarm'])
-            self.stintports.append(val['link'])
+            self.alintports.append(bool(val['alarm']))
+            self.stintports.append(bool(val['link']))
         self.mgmt_ips = switch.get_mgmt_ip()
         self.mgmt_ip = ''
         for val in self.mgmt_ips:
             if val['iface_name'] == 'vlan1':
-                self.mgmt_ip = val['primary_ip']
+                try:
+                    self.mgmt_ip = val['secondary_ip']
+                except KeyError:
+                    self.mgmt_ip = ''
+        print(self.mgmt_ip)
 
-        print(self.alintports)
         for num, val in enumerate(self.alintports):
             if val:
-                self.alobjports[num].set(1)
+                self.alobjports[num].set(True)
         # Delete old values
         self.swname.delete(0, tk.END)
         self.swloc.delete(0, tk.END)
@@ -256,7 +265,7 @@ class MainPage(tk.Frame):
         self.swname.insert(tk.END, self.system['system_name'])
         try:
             self.swloc.insert(tk.END, self.system['system_location'])
-        except:
+        except KeyError:
             self.swloc.insert(tk.END, '')
 
         self.swdesc.insert(tk.END, self.system['hw_model'])
@@ -268,7 +277,7 @@ class MainPage(tk.Frame):
         self.swver.config(bg='#D9D9D9', relief=tk.FLAT, state=tk.DISABLED)
         self.swswv.insert(tk.END, self.system['system_firmware'])
         self.swswv.config(bg='#D9D9D9', relief=tk.FLAT, state=tk.DISABLED)
-        self.swip.insert(tk.END, self.mgmt_ip[2])
+        self.swip.insert(tk.END, self.mgmt_ip)
         self.pcol = self.portcolor()
         self.port_1.config(background=self.pcol[0])
         self.port_2.config(background=self.pcol[1])

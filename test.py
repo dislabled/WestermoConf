@@ -81,11 +81,22 @@ port    link type          speed      state      alarm   vid  mac_address      {
 """
 
 # parser = ttp(data=data_sysinfo, template=sysinfo_template)
-parser = ttp(data=data_alarmlog, template=alarmlog_template)
-# parser = ttp(data=data_sysinfo, template=sysinfo_template)
-parser.parse()
-results = parser.result(format='json')[0]
-print(results)
+# parser = ttp(data=data_alarmlog, template=alarmlog_template)
+# # parser = ttp(data=data_sysinfo, template=sysinfo_template)
+# parser.parse()
+# results = parser.result(format='json')[0]
+# print(results)
+alarm = [True, True, False, True, False, False, False, False, False, True]
+port_list = ''
+for cnt, val in enumerate(alarm):
+    if cnt <= 0:
+        if val is True:
+            port_list = str(cnt + 1)
+    else:
+        if val is True:
+            port_list += ',' + str(cnt + 1)
+
+print(port_list)
 
 input()
 
