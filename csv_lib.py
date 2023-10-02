@@ -32,6 +32,10 @@ class ConfigFile():
         """
         with open(file, 'r+') as f:
             csvobject = DictReader(f, delimiter=',', quotechar='"')
+            if csvobject.fieldnames is not None:
+                fieldnames = csvobject.fieldnames
+            else:
+                fieldnames = ''
             csvlist = list(csvobject)
             for row in csvlist:
                 if row['Cabinet'] == cabinet:
@@ -43,7 +47,7 @@ class ConfigFile():
 
             f.seek(0)
             data = DictWriter(f, delimiter=',',
-                              quotechar='"', fieldnames=csvobject.fieldnames)
+                              quotechar='"', fieldnames=fieldnames)
             data.writeheader()
             data.writerows(csvlist)
 
