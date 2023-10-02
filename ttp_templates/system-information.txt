@@ -1,6 +1,6 @@
 System Name        : {{ system_name }}
 System Contact     : {{ system_contact }}
-System Location    : {{ system_location }}
+System Location    : {{ system_location | PHRASE }}
 System Timezone    : {{ system_timezone }}
 
 Product Family     : {{ hw_family }}              Model              : {{ hw_model }}

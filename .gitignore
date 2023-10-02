@@ -1,6 +1,7 @@
 
 # Site specific secrets
 site/
+test.py
 
 
 # Byte-compiled / optimized / DLL files

@@ -102,43 +102,48 @@ class MainPage(tk.Frame):
         self.port_1 = tk.Checkbutton(self.frame1, text='1',
                                      variable=self.alobjports[0],
                                      command=lambda: self.p_refresh())
-        self.port_1.grid(row=5, column=1, padx=0)
+        self.port_1.grid(row=1, column=3, padx=0)
         self.port_2 = tk.Checkbutton(self.frame1, text='2',
                                      variable=self.alobjports[1],
-                command=lambda: self.p_refresh())
-        self.port_2.grid(row=5, column=3, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_2.grid(row=2, column=3, padx=0)
         self.port_3 = tk.Checkbutton(self.frame1, text='3',
                                      variable=self.alobjports[2],
-                command=lambda: self.p_refresh())
-        self.port_3.grid(row=4, column=1, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_3.grid(row=3, column=1, padx=0)
         self.port_4 = tk.Checkbutton(self.frame1, text='4',
                                      variable=self.alobjports[3],
-                command=lambda: self.p_refresh())
-        self.port_4.grid(row=4, column=3, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_4.grid(row=3, column=3, padx=0)
         self.port_5 = tk.Checkbutton(self.frame1, text='5',
                                      variable=self.alobjports[4],
-                command=lambda: self.p_refresh())
-        self.port_5.grid(row=3, column=1, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_5.grid(row=4, column=1, padx=0)
         self.port_6 = tk.Checkbutton(self.frame1, text='6',
                                      variable=self.alobjports[5],
-                command=lambda: self.p_refresh())
-        self.port_6.grid(row=3, column=3, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_6.grid(row=4, column=3, padx=0)
         self.port_7 = tk.Checkbutton(self.frame1, text='7',
                                      variable=self.alobjports[6],
-                command=lambda: self.p_refresh())
-        self.port_7.grid(row=2, columnspan=4, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_7.grid(row=5, column=1, padx=0)
         self.port_8 = tk.Checkbutton(self.frame1, text='8',
                                      variable=self.alobjports[7],
-                command=lambda: self.p_refresh())
-        self.port_8.grid(row=1, columnspan=4, padx=0)
+                                     command=lambda: self.p_refresh())
+        self.port_8.grid(row=5, column=3, padx=0)
         self.port_9 = tk.Checkbutton(self.frame1, text='9',
                                      variable=self.alobjports[8],
                                      command=lambda: self.p_refresh())
-        self.port_9.grid(row=1, columnspan=4, padx=0)
+        self.port_9.grid(row=6, column=1, padx=0)
         self.port_10 = tk.Checkbutton(self.frame1, text='10',
                                       variable=self.alobjports[9],
                                       command=lambda: self.p_refresh())
-        self.port_10.grid(row=1, columnspan=4, padx=0)
+        self.port_10.grid(row=6, column=3, padx=0)
+        self.frnt_button = tk.Button(self.frame1, text="NO FRNT",
+                                   command=self.bswitch)
+        self.frnt_button.grid(row=7,columnspan=4, padx=0)
+        self.frnt_stat = tk.IntVar(value=0)
+
 
         button1 = tk.Button(self.frame2, text="download config",
                             command=self.download_config)
@@ -152,10 +157,22 @@ class MainPage(tk.Frame):
         button5 = tk.Button(self.frame2, text="alarm log",
                             command=lambda: controller.show_frame(LogView))
         button5.grid(row=1, column=1)
-        button6 = tk.Button(self.frame2, text="copy ram2rom",
+        self.button6 = tk.Button(self.frame2, text="copy ram2rom",
                             command=self.apply)
-        button6.grid(row=1, column=2)
+        self.button6.grid(row=1, column=2)
 
+    def bswitch(self) -> None:
+        """ On/Off switch
+        """
+        print(self.frnt_stat.get())
+        if self.frnt_stat.get() == 0:
+            switch.set_frtn()
+            switch.set_focal(member=False)
+        elif self.frnt_stat.get() == 1:
+            switch.set_focal(member=True)
+        elif self.frnt_stat.get() == 2:
+            switch.set_frtn(ports = [0])
+        self.refresh()
 
     def p_refresh(self):
         """ Refresh port values
@@ -202,11 +219,12 @@ class MainPage(tk.Frame):
         """ Save the running config to startup config
         """
         result = switch.save_run2startup()
-        print(result)
         if result:
             mb.showinfo(message= 'Success')
+            self.refresh()
         else:
             mb.showerror(title='Error', message='Something went wrong')
+            self.refresh()
 
     def upd_name(self):
         """ Write the new hostname
@@ -229,6 +247,18 @@ class MainPage(tk.Frame):
         # Read new values
         self.system = switch.get_sysinfo()
         self.uptime = switch.get_uptime()
+        self.frnt = switch.get_frnt()
+        if self.frnt:
+            if self.frnt[1]['mode'] == 'Focal':
+                self.frnt_button.configure(text='MASTER FRNT')
+                self.frnt_stat.set(1)
+            if self.frnt[1]['mode'] == 'Member':
+                self.frnt_button.configure(text='MEMBER FRTN')
+                self.frnt_stat.set(2)
+        else:
+            self.frnt_button.configure(text='NO FRNT')
+            self.frnt_stat.set(0)
+
         self.portlist: list[dict[str, str]] = switch.get_ports()
         self.alintports: list[bool] = []
         self.stintports: list[bool] = []
@@ -243,14 +273,19 @@ class MainPage(tk.Frame):
                     self.mgmt_ip = val['secondary_ip']
                 except KeyError:
                     self.mgmt_ip = ''
-        print(self.mgmt_ip)
 
         for num, val in enumerate(self.alintports):
             if val:
                 self.alobjports[num].set(True)
+        self.saved = switch.compare_config()
+        if not self.saved:
+            self.button6.config(background='#FF0000')
+        else:
+            self.button6.config(background='#D9D9D9')
         # Delete old values
         self.swname.delete(0, tk.END)
         self.swloc.delete(0, tk.END)
+        self.swdesc.config(bg='#D9D9D9', relief=tk.FLAT, state=tk.NORMAL)
         self.swdesc.delete(1.0, tk.END)
         self.swmac.config(bg='#D9D9D9', relief=tk.FLAT, state=tk.NORMAL)
         self.swmac.delete(1.0, tk.END)
@@ -345,10 +380,10 @@ class AutoConf(tk.Frame):
         """
         _ = event   # Hush some editor warnings
         config = self.tree.item(self.tree.focus())['values']
-        ports = [0,0,0,0,0,0,0,0]
+        ports = [False,False,False,False,False,False,False,False,False,False]
         for count, port in enumerate(switch.get_ports()):
-            if port:
-                ports[count] = 1
+            if port['link']:
+                ports[count] = True
         if self.swmainred.get() == 0:
             main_reserve = 'M'
         else:
@@ -364,7 +399,7 @@ class AutoConf(tk.Frame):
             switch.set_alarm(ports)
             switch.save_run2startup()
             self.config_file.write_config(self.file, config[0],
-                                    switch.get_sysinfo()[4],
+                                    switch.get_sysinfo()['system_mac'],
                                     True if self.swmainred.get() ==  0 else False )
             self.refresh()
 

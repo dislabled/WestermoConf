@@ -19,8 +19,17 @@ class fileHandler:
 
 
 """
+from typing import Any
+import re
 from ipaddress import ip_address
 from scrapli import Scrapli # type: ignore
+
+
+def str_to_dict(string):
+    string = string.strip('{}')
+    pairs = string.split(', ')
+    return {key[1:-2]: str(value) for key,
+        value in (pair.split(': ') for pair in pairs)}
 
 class Westermo:
     """
@@ -60,20 +69,20 @@ class Westermo:
             dict: System parameters dictionary
         """
         sysinfo = self.conn.send_command('show system-information')
-        return_values = sysinfo.ttp_parse_output(
-            template='ttp_templates/system-information.txt')
-        self.vprint(f'get_sysinfo function: {return_values[0]}')
-        return return_values[0]
+        return_values: Any = list(sysinfo.ttp_parse_output(
+            template='ttp_templates/system-information.txt'))[0]
+        self.vprint(f'get_sysinfo function: {return_values}')
+        return return_values
 
 
     def get_mgmt_ip(self) -> list[dict]:
         """ Gets current management ip info
         """
         ip_mgmt_info = self.conn.send_command('show ifaces')
-        return_values = ip_mgmt_info.ttp_parse_output(
-            template='ttp_templates/show_ifaces.txt')
-        self.vprint(f'get_mgmt_ip function: {list(return_values)[0]}')
-        return return_values[0]
+        return_values: Any = list(ip_mgmt_info.ttp_parse_output(
+            template='ttp_templates/show_ifaces.txt'))[0]
+        self.vprint(f'get_mgmt_ip function: {return_values}')
+        return return_values
 
 
     def get_ports(self) -> list[dict]:
@@ -83,8 +92,8 @@ class Westermo:
             list|dict: Status of all ports
         """
         status_ports = self.conn.send_command('show port')
-        first_parse = status_ports.ttp_parse_output(
-            template='ttp_templates/ports.txt')
+        first_parse: Any = list(status_ports.ttp_parse_output(
+            template='ttp_templates/ports.txt'))
         return_values = first_parse[0][2:]
         for keys in return_values:
             keys['port'] = int(keys['port'][4:])
@@ -94,6 +103,8 @@ class Westermo:
             else:
                 keys['link'] = False
             if keys['alarm'] == 'ALARM':
+                keys['alarm'] = True
+            elif keys['alarm'] == 'None':
                 keys['alarm'] = True
             else:
                 keys['alarm'] = False
@@ -107,23 +118,31 @@ class Westermo:
             list|dict: Status of all ports
         """
         status_ports = self.conn.send_command('show frnt')
-        return_values = status_ports.ttp_parse_output(
-            template='ttp_templates/show_frnt.txt')
+        return_values: Any = list(status_ports.ttp_parse_output(
+            template='ttp_templates/show_frnt.txt'))[0]
         self.vprint(f'get_ports function: {status_ports.result}')
         return return_values
 
-    def set_frtn(self, ports=[1,2]) -> None:
-        """ Sets up the FRNT Ring
+    def set_frtn(self, ports: list[int]=[1,2]) -> None:
+        """ Toggle the FRNT Ring
         """
-        portstr = ','.join(str(x) for x in ports)
-        self.conn.send_config(f'frnt 1 ring-ports {portstr}' )
-        self.vprint(f'set_frnt function: frnt set on port {portstr}')
+        if ports == [0]:
+            self.conn.send_config('no frnt 1' )
+            self.vprint('set_frnt function: disabling frnt')
+        else:
+            portstr = ','.join(str(x) for x in ports)
+            self.conn.send_config(f'frnt 1 ring-ports {portstr}' )
+            self.vprint(f'set_frnt function: frnt set on port {portstr}')
 
-    def set_focal(self) -> None:
+    def set_focal(self, member: bool=True) -> None:
         """ Set member on the FRNT Ring
         """
-        self.conn.send_config('frnt 1 no focal-point' )
-        self.vprint('set_focal function: member')
+        if member:
+            self.conn.send_config('frnt 1 no focal-point' )
+            self.vprint('set_focal function: member')
+        else:
+            self.conn.send_config('frnt 1 focal-point' )
+            self.vprint('set_focal function: master')
 
 
     def set_alarm(self, alarm:list[bool]) -> None:
@@ -136,11 +155,10 @@ class Westermo:
         """
         port_list = ''
         for cnt, val in enumerate(alarm):
-            if cnt <= 0:
-                if val is True:
+            if val is True:
+                if port_list == '':
                     port_list = str(cnt + 1)
-            else:
-                if val is True:
+                else:
                     port_list += ',' + str(cnt + 1)
 
         self.conn.send_config('alarm no action 1') # unset alarmaction 1
@@ -150,7 +168,6 @@ class Westermo:
         self.conn.send_config('alarm action 1 target led,log,digout')
         self.vprint(alarm)
         self.vprint(f'set_alarm function: set alarm on ifaces {port_list} ON')
-
 
     def set_mgmt_ip(self, ip_add:str) -> bool:
         """ Changes the management ip-address of the switch to (ip)
@@ -164,12 +181,19 @@ class Westermo:
             ip_address(ip_add)
         except ValueError:
             return False
-        # self.conn.send_interactive(
-        #                         [('iface vlan1 inet static no address secondary'
-        #                           ,'=> Are you sure (y/N)?', False),
-        #                          ('y', '', False)])
-        # self.conn.send_config(f'iface vlan1 inet static address {ip_add}/24 secondary')
-        self.vprint(f'set_mgmt_ip function: setting vlan1 to {ip_add}')
+        self.vprint('set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24}')
+        self.conn.send_config('iface vlan1 inet static address 192.168.2.200/24')
+        self.conn.send_config('exit')
+        self.vprint('set_mgmt_ip function: removing all secondary ip')
+        self.conn.send_interactive(
+            [
+                ('iface vlan1 inet static no address secondary'
+                ,'Remove all secondary IP addresses, are you sure (y/N)? ', False),
+                ('y', '', False)
+            ], privilege_level='configuration')
+        self.conn.send_config('exit')
+        self.vprint(f'set_mgmt_ip function: setting vlan1 secondary to {ip_add}')
+        self.conn.send_config(f'iface vlan1 inet static address {ip_add}/24 secondary')
         return True
 
     def set_hostname(self, hostname:str) -> None:
@@ -192,7 +216,8 @@ class Westermo:
             self.conn.send_config('no system location')
             self.vprint('set_location function: removing location')
         else:
-            self.conn.send_config(f'system location {location}')
+            location = re.sub('[^a-zA-Z0-9 \n\.]', '', location)
+            self.conn.send_config(f'system location \'{location}\'')
             self.vprint(f'set_location function: set to: {location}')
 
 
@@ -250,8 +275,8 @@ class Westermo:
         """
         self.vprint('get_alarm_log function: ')
         returnobj = self.conn.send_command('show alarm')
-        return_values = returnobj.ttp_parse_output(
-            template='ttp_templates/alarm_log.txt')[0]
+        return_values: Any = list(returnobj.ttp_parse_output(
+            template='ttp_templates/alarm_log.txt'))[0]
         self.vprint(return_values)
         return return_values
 
@@ -275,21 +300,23 @@ if __name__ == "__main__":
         'auth_strict_key': False,
         'platform': 'westermo_weos'
     }
-    alarms = [1,2,10]
+    # alarms = [False,False,False,False,False,False,False,True,False,True]
 
     with Westermo(verbose=True, **SWITCH) as switch:
-        # switch.get_sysinfo()
+        switch.get_sysinfo()
         # switch.get_uptime()
-        switch.get_ports()
+        # switch.get_ports()
         # switch.save_config()
         # switch.compare_config()
         # switch.set_alarm(alarms)
-        # switch.set_mgmt_ip('192.168.2.200')
+        # switch.set_mgmt_ip('192.168.0.202')
         # switch.get_mgmt_ip()
         # switch.get_alarm_log()
         # switch.get_event_log()
         # switch.factory_conf()
         # switch.set_frtn()
-        # switch.set_focal()
+        # switch.conn.send_config('exit')
+        # switch.set_focal(member=True)
+        # switch.get_frnt()
         # switch.save_run2startup()
         input()
