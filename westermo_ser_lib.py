@@ -22,24 +22,27 @@ class fileHandler:
 from typing import Any
 import re
 from ipaddress import ip_address
-from scrapli import Scrapli # type: ignore
+from scrapli import Scrapli  # type: ignore
 
 
 def str_to_dict(string):
-    string = string.strip('{}')
-    pairs = string.split(', ')
-    return {key[1:-2]: str(value) for key,
-        value in (pair.split(': ') for pair in pairs)}
+    string = string.strip("{}")
+    pairs = string.split(", ")
+    return {
+        key[1:-2]: str(value) for key, value in (pair.split(": ") for pair in pairs)
+    }
+
 
 class Westermo:
     """
     Class for interacting with the westermo switch
     """
-    def __init__(self, verbose:bool=False, **kwargs) -> None:
+
+    def __init__(self, verbose: bool = False, **kwargs) -> None:
         self.verbose = verbose
         self.DEVICE = kwargs
 
-    def __enter__(self): # -> None:
+    def __enter__(self):  # -> None:
         # self.conn = GenericDriver(**self.DEVICE)
         self.conn = Scrapli(**self.DEVICE)
         self.conn.open()
@@ -54,123 +57,121 @@ class Westermo:
         Prints only when verbose is true
         """
         if self.verbose is True:
-            print(f'Westermo_weos: {text}')
-
+            print(f"Westermo_weos: {text}")
 
     def get_uptime(self) -> str:
-        uptime = self.conn.send_command('uptime')
+        uptime = self.conn.send_command("uptime")
         self.vprint(uptime.result[1:9])
         return str(uptime.result[1:9])
 
     def get_sysinfo(self) -> dict:
-        """ Gets system info and returns it as a list|dict
+        """Gets system info and returns it as a list|dict
 
         Returns:
             dict: System parameters dictionary
         """
-        sysinfo = self.conn.send_command('show system-information')
-        return_values: Any = list(sysinfo.ttp_parse_output(
-            template='ttp_templates/system-information.txt'))[0]
-        self.vprint(f'get_sysinfo function: {return_values}')
+        sysinfo = self.conn.send_command("show system-information")
+        return_values: Any = list(
+            sysinfo.ttp_parse_output(template="ttp_templates/system-information.txt")
+        )[0]
+        self.vprint(f"get_sysinfo function: {return_values}")
         return return_values
-
 
     def get_mgmt_ip(self) -> list[dict]:
-        """ Gets current management ip info
-        """
-        ip_mgmt_info = self.conn.send_command('show ifaces')
-        return_values: Any = list(ip_mgmt_info.ttp_parse_output(
-            template='ttp_templates/show_ifaces.txt'))[0]
-        self.vprint(f'get_mgmt_ip function: {return_values}')
+        """Gets current management ip info"""
+        ip_mgmt_info = self.conn.send_command("show ifaces")
+        return_values: Any = list(
+            ip_mgmt_info.ttp_parse_output(template="ttp_templates/show_ifaces.txt")
+        )[0]
+        self.vprint(f"get_mgmt_ip function: {return_values}")
         return return_values
-
 
     def get_ports(self) -> list[dict]:
-        """ Gets status of ports, and returns it as a list|dict.
+        """Gets status of ports, and returns it as a list|dict.
 
         Returns:
             list|dict: Status of all ports
         """
-        status_ports = self.conn.send_command('show port')
-        first_parse: Any = list(status_ports.ttp_parse_output(
-            template='ttp_templates/ports.txt'))
+        status_ports = self.conn.send_command("show port")
+        first_parse: Any = list(
+            status_ports.ttp_parse_output(template="ttp_templates/ports.txt")
+        )
         return_values = first_parse[0][2:]
         for keys in return_values:
-            keys['port'] = int(keys['port'][4:])
-            keys['vid'] = int(keys['vid'])
-            if keys['link'] == 'UP':
-                keys['link'] = True
+            keys["port"] = int(keys["port"][4:])
+            keys["vid"] = int(keys["vid"])
+            if keys["link"] == "UP":
+                keys["link"] = True
             else:
-                keys['link'] = False
-            if keys['alarm'] == 'ALARM':
-                keys['alarm'] = True
-            elif keys['alarm'] == 'None':
-                keys['alarm'] = True
+                keys["link"] = False
+            if keys["alarm"] == "ALARM":
+                keys["alarm"] = True
+            elif keys["alarm"] == "None":
+                keys["alarm"] = True
             else:
-                keys['alarm'] = False
-        self.vprint(f'get_ports function: {return_values}')
+                keys["alarm"] = False
+        self.vprint(f"get_ports function: {return_values}")
         return return_values
 
-    def get_frnt(self) -> list|dict:
-        """ Gets status of ports, and returns it as a list|dict.
+    def get_frnt(self) -> list | dict:
+        """Gets status of ports, and returns it as a list|dict.
 
         Returns:
             list|dict: Status of all ports
         """
-        status_ports = self.conn.send_command('show frnt')
-        return_values: Any = list(status_ports.ttp_parse_output(
-            template='ttp_templates/show_frnt.txt'))[0]
-        self.vprint(f'get_ports function: {status_ports.result}')
+        status_ports = self.conn.send_command("show frnt")
+        return_values: Any = list(
+            status_ports.ttp_parse_output(template="ttp_templates/show_frnt.txt")
+        )[0]
+        self.vprint(f"get_ports function: {status_ports.result}")
         return return_values
 
-    def set_frtn(self, ports: list[int]=[1,2]) -> None:
-        """ Toggle the FRNT Ring
-        """
+    def set_frtn(self, ports: list[int] = [1, 2]) -> None:
+        """Toggle the FRNT Ring"""
         if ports == [0]:
-            self.conn.send_config('no frnt 1' )
-            self.vprint('set_frnt function: disabling frnt')
+            self.conn.send_config("no frnt 1")
+            self.vprint("set_frnt function: disabling frnt")
         else:
-            portstr = ','.join(str(x) for x in ports)
-            self.conn.send_config(f'frnt 1 ring-ports {portstr}' )
-            self.vprint(f'set_frnt function: frnt set on port {portstr}')
+            portstr = ",".join(str(x) for x in ports)
+            self.conn.send_config(f"frnt 1 ring-ports {portstr}")
+            self.vprint(f"set_frnt function: frnt set on port {portstr}")
 
-    def set_focal(self, member: bool=True) -> None:
-        """ Set member on the FRNT Ring
-        """
+    def set_focal(self, member: bool = True) -> None:
+        """Set member on the FRNT Ring"""
         if member:
-            self.conn.send_config('frnt 1 no focal-point' )
-            self.vprint('set_focal function: member')
+            self.conn.send_config("frnt 1 no focal-point")
+            self.vprint("set_focal function: member")
         else:
-            self.conn.send_config('frnt 1 focal-point' )
-            self.vprint('set_focal function: master')
+            self.conn.send_config("frnt 1 focal-point")
+            self.vprint("set_focal function: master")
 
-
-    def set_alarm(self, alarm:list[bool]) -> None:
-        """ Configures alarm when link down for interfaces in list.
+    def set_alarm(self, alarm: list[bool]) -> None:
+        """Configures alarm when link down for interfaces in list.
 
         value == True is alarm on
 
         Args:
             alarm (list): interfaces with alarm on or off
         """
-        port_list = ''
+        port_list = ""
         for cnt, val in enumerate(alarm):
             if val is True:
-                if port_list == '':
+                if port_list == "":
                     port_list = str(cnt + 1)
                 else:
-                    port_list += ',' + str(cnt + 1)
+                    port_list += "," + str(cnt + 1)
 
-        self.conn.send_config('alarm no action 1') # unset alarmaction 1
-        self.conn.send_config('alarm no trigger 1') # unset alarmtrigger 1
+        self.conn.send_config("alarm no action 1")  # unset alarmaction 1
+        self.conn.send_config("alarm no trigger 1")  # unset alarmtrigger 1
         self.conn.send_config(
-            f'alarm trigger 1 link-alarm condition low port {port_list}')
-        self.conn.send_config('alarm action 1 target led,log,digout')
+            f"alarm trigger 1 link-alarm condition low port {port_list}"
+        )
+        self.conn.send_config("alarm action 1 target led,log,digout")
         self.vprint(alarm)
-        self.vprint(f'set_alarm function: set alarm on ifaces {port_list} ON')
+        self.vprint(f"set_alarm function: set alarm on ifaces {port_list} ON")
 
-    def set_mgmt_ip(self, ip_add:str) -> bool:
-        """ Changes the management ip-address of the switch to (ip)
+    def set_mgmt_ip(self, ip_add: str) -> bool:
+        """Changes the management ip-address of the switch to (ip)
 
         Args:
             ip_add (str): IP Address to set
@@ -181,124 +182,122 @@ class Westermo:
             ip_address(ip_add)
         except ValueError:
             return False
-        self.vprint('set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24}')
-        self.conn.send_config('iface vlan1 inet static address 192.168.2.200/24')
-        self.conn.send_config('exit')
-        self.vprint('set_mgmt_ip function: removing all secondary ip')
+        self.vprint("set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24}")
+        self.conn.send_config("iface vlan1 inet static address 192.168.2.200/24")
+        self.conn.send_config("exit")
+        self.vprint("set_mgmt_ip function: removing all secondary ip")
         self.conn.send_interactive(
             [
-                ('iface vlan1 inet static no address secondary'
-                ,'Remove all secondary IP addresses, are you sure (y/N)? ', False),
-                ('y', '', False)
-            ], privilege_level='configuration')
-        self.conn.send_config('exit')
-        self.vprint(f'set_mgmt_ip function: setting vlan1 secondary to {ip_add}')
-        self.conn.send_config(f'iface vlan1 inet static address {ip_add}/24 secondary')
+                (
+                    "iface vlan1 inet static no address secondary",
+                    "Remove all secondary IP addresses, are you sure (y/N)? ",
+                    False,
+                ),
+                ("y", "", False),
+            ],
+            privilege_level="configuration",
+        )
+        self.conn.send_config("exit")
+        self.vprint(f"set_mgmt_ip function: setting vlan1 secondary to {ip_add}")
+        self.conn.send_config(f"iface vlan1 inet static address {ip_add}/24 secondary")
         return True
 
-    def set_hostname(self, hostname:str) -> None:
-        """ Changes the hostname of the switch
+    def set_hostname(self, hostname: str) -> None:
+        """Changes the hostname of the switch
 
         Args:
             hostname (str): Hostname to switch to
         """
-        self.conn.send_config(f'system hostname {hostname}')
-        self.vprint(f'conf_hostname function: set {hostname}')
+        self.conn.send_config(f"system hostname {hostname}")
+        self.vprint(f"conf_hostname function: set {hostname}")
 
-
-    def set_location(self, location:str) -> None:
-        """ Changes the location parameter of the switch
+    def set_location(self, location: str) -> None:
+        """Changes the location parameter of the switch
 
         Args:
             location (str): location string to switch to
         """
-        if location == '':
-            self.conn.send_config('no system location')
-            self.vprint('set_location function: removing location')
+        if location == "":
+            self.conn.send_config("no system location")
+            self.vprint("set_location function: removing location")
         else:
-            location = re.sub('[^a-zA-Z0-9 \n\.]', '', location)
-            self.conn.send_config(f'system location \'{location}\'')
-            self.vprint(f'set_location function: set to: {location}')
-
+            location = re.sub("[^a-zA-Z0-9 \n\\.]", "", location)
+            self.conn.send_config(f"system location '{location}'")
+            self.vprint(f"set_location function: set to: {location}")
 
     def factory_conf(self) -> None:
-        """ Reset device to factory defaults
-        """
+        """Reset device to factory defaults"""
         self.conn.send_interactive(
-                                [('factory-reset' ,'=> Are you sure (y/N)?', False),
-                                 ('y', '', False)])
-        self.vprint('factory_conf function: Factory defaults set')
-
+            [("factory-reset", "=> Are you sure (y/N)?", False), ("y", "", False)]
+        )
+        self.vprint("factory_conf function: Factory defaults set")
 
     def save_run2startup(self) -> bool:
-        """ Saves the configuration from running to startup
-        """
-        response = self.conn.send_command('copy run start')
-        self.vprint(f'save_run2startup function: {response.result}')
-        if response.result != '':
+        """Saves the configuration from running to startup"""
+        response = self.conn.send_command("copy run start")
+        self.vprint(f"save_run2startup function: {response.result}")
+        if response.result != "":
             return False
         return True
 
-
-
     def save_config(self) -> str:
-        """ Gets the startup config and returns it as a decoded string
+        """Gets the startup config and returns it as a decoded string
 
         Returns:
             config (str)
         """
-        config = self.conn.send_command('show startup-config').result
+        config = self.conn.send_command("show startup-config").result
         return config
 
-
     def compare_config(self) -> bool:
-        """ Compares the running and startup config and returns status
+        """Compares the running and startup config and returns status
 
         Returns:
             status (bool): True = Match
                            False = Mismatch
         """
-        raw_startup = self.conn.send_command('show startup-config').result
-        parsed_startup = ''.join(raw_startup.splitlines(keepends=True)[:-4]).rstrip()
-        raw_running = self.conn.send_command('show running-config').result
+        raw_startup = self.conn.send_command("show startup-config").result
+        parsed_startup = "".join(raw_startup.splitlines(keepends=True)[:-4]).rstrip()
+        raw_running = self.conn.send_command("show running-config").result
         if parsed_startup == raw_running:
-            self.vprint('compare_config function: True')
+            self.vprint("compare_config function: True")
             return True
-        self.vprint('compare_config function: False')
+        self.vprint("compare_config function: False")
         return False
 
     def get_alarm_log(self) -> list | dict:
-        """ Returns the alarm log as a list | dict
+        """Returns the alarm log as a list | dict
 
         Returns:
             eventlog (list | dict)
         """
-        self.vprint('get_alarm_log function: ')
-        returnobj = self.conn.send_command('show alarm')
-        return_values: Any = list(returnobj.ttp_parse_output(
-            template='ttp_templates/alarm_log.txt'))[0]
+        self.vprint("get_alarm_log function: ")
+        returnobj = self.conn.send_command("show alarm")
+        return_values: Any = list(
+            returnobj.ttp_parse_output(template="ttp_templates/alarm_log.txt")
+        )[0]
         self.vprint(return_values)
         return return_values
 
     def get_event_log(self) -> str:
-        """ Returns the event list as a list | dict
+        """Returns the event list as a list | dict
 
         Returns:
             log (str)
         """
-        self.vprint('get_event_log function: ')
-        return_values = self.conn.send_command('alarm log').result
+        self.vprint("get_event_log function: ")
+        return_values = self.conn.send_command("alarm log").result
         self.vprint(return_values)
         return return_values
 
 
 if __name__ == "__main__":
     SWITCH = {
-        'host': '192.168.2.200',
-        'auth_username': 'admin',
-        'auth_password': 'westermo',
-        'auth_strict_key': False,
-        'platform': 'westermo_weos'
+        "host": "192.168.2.200",
+        "auth_username": "admin",
+        "auth_password": "westermo",
+        "auth_strict_key": False,
+        "platform": "westermo_weos",
     }
     # alarms = [False,False,False,False,False,False,False,True,False,True]
 
