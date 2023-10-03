@@ -284,11 +284,8 @@ class MainPage(tk.Frame):
         """Write the new IP address"""
         switch.set_mgmt_ip(self.swip.get())
 
-    def refresh(self) -> None:
-        """Read and refresh values on screen"""
-        # Read new values
-        self.system = switch.get_sysinfo()
-        self.uptime = switch.get_uptime()
+    def frnt_refresh(self) -> None:
+        """Refresh the FRNT button"""
         self.frnt = switch.get_frnt()
         if self.frnt:
             if self.frnt[1]["mode"] == "Focal":
@@ -301,12 +298,8 @@ class MainPage(tk.Frame):
             self.frnt_button.configure(text="NO FRNT")
             self.frnt_stat.set(0)
 
-        self.portlist: list[dict[str, str]] = switch.get_ports()
-        self.alintports: list[bool] = []
-        self.stintports: list[bool] = []
-        for val in self.portlist:
-            self.alintports.append(bool(val["alarm"]))
-            self.stintports.append(bool(val["link"]))
+    def mgmt_ip_refresh(self) -> str:
+        """Refresh the Management secondary_ip"""
         self.mgmt_ips = switch.get_mgmt_ip()
         self.mgmt_ip = ""
         for val in self.mgmt_ips:
@@ -315,15 +308,36 @@ class MainPage(tk.Frame):
                     self.mgmt_ip = val["secondary_ip"]
                 except KeyError:
                     self.mgmt_ip = ""
+        return self.mgmt_ip
 
-        for num, val in enumerate(self.alintports):
-            if val:
-                self.alobjports[num].set(True)
+    def save_refresh(self) -> None:
+        """Change background of button6 to indicate if configuration is saved or not"""
         self.saved = switch.compare_config()
         if not self.saved:
             self.button6.config(background="#FF0000")
         else:
             self.button6.config(background="#D9D9D9")
+
+    def refresh(self) -> None:
+        """Read and refresh values on screen"""
+        # Read new values
+        self.system = switch.get_sysinfo()
+        self.uptime = switch.get_uptime()
+        self.portlist: list[dict[str, str]] = switch.get_ports()
+        self.alintports: list[bool] = []
+        self.stintports: list[bool] = []
+        self.mgmt_ip = self.mgmt_ip_refresh()
+        self.frnt_refresh()
+        self.mgmt_ip_refresh()
+        self.save_refresh()
+        for val in self.portlist:
+            self.alintports.append(bool(val["alarm"]))
+            self.stintports.append(bool(val["link"]))
+
+        for num, val in enumerate(self.alintports):
+            if val:
+                self.alobjports[num].set(True)
+        self.saved = switch.compare_config()
         # Delete old values
         self.swname.delete(0, tk.END)
         self.swloc.delete(0, tk.END)
@@ -464,7 +478,7 @@ class AutoConf(tk.Frame):
                 self.file,
                 config[0],
                 switch.get_sysinfo()["system_mac"],
-                True if self.swmainred.get() == 0 else False,
+                self.swmainred.get() == 0,
             )
             self.refresh()
 
