@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 # coding=utf-8
+"""Handle all CSV Related stuff."""
 from csv import DictReader, DictWriter
 
 
 class ConfigFile:
+    """Read and write CSV configfile."""
+
     def __init__(self) -> None:
+        """Initialize class."""
         pass
 
     def read_config(self, file: str) -> list:
-        """Read CSV file and output dictionary
+        """
+        Read CSV file and output dictionary.
+
         Header - Cabinet,AP,SW,IOG,MBB,DIPB,MBR,DIPR,IBC IP address,
                  Switch IP address,Position,MAC M,MAC R
         input:
@@ -21,7 +27,8 @@ class ConfigFile:
         return config
 
     def write_config(self, file: str, cabinet: str, mac: str, main: bool) -> None:
-        """Write the MAC address to the csv file
+        """
+        Write the MAC address to the csv file.
 
         input:
             file(str)
