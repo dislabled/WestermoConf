@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""
-A GUI configurator for Westermo weos switches
-"""
+"""A GUI configurator for Westermo weos switches."""
 import sys
 import tkinter as tk
 from tkinter import BooleanVar, messagebox as mb
@@ -13,9 +11,10 @@ from csv_lib import ConfigFile
 
 
 class WestermoGUI(tk.Tk):
-    """Root window for Westermo configurator"""
+    """Root window for Westermo configurator."""
 
     def __init__(self, *args, **kwargs) -> None:
+        """Initialize the class."""
         tk.Tk.__init__(self, *args, **kwargs)
         self.wm_title("Westermo Configurator")
         self.resizable(False, False)
@@ -33,7 +32,7 @@ class WestermoGUI(tk.Tk):
         self.show_frame(MainPage)
 
     def show_frame(self, cont):
-        """Method to raise frames"""
+        """Raise the frames."""
         self.config(cursor="watch")
         frame = self.frames[cont]
         frame.tkraise()
@@ -42,9 +41,10 @@ class WestermoGUI(tk.Tk):
 
 
 class MainPage(tk.Frame):
-    """Main Frame"""
+    """Main Frame."""
 
     def __init__(self, parent, controller):
+        """Initialize the class."""
         tk.Frame.__init__(self, parent)
         self.frame0 = tk.Frame(self)  # Hostname etc
         self.frame0.grid(row=0, column=0, sticky="nw")
@@ -212,7 +212,7 @@ class MainPage(tk.Frame):
         self.button6.grid(row=1, column=2)
 
     def bswitch(self) -> None:
-        """On/Off switch"""
+        """Toggle switch On/Off."""
         print(self.frnt_stat.get())
         if self.frnt_stat.get() == 0:
             switch.set_frtn()
@@ -224,7 +224,7 @@ class MainPage(tk.Frame):
         self.refresh()
 
     def p_refresh(self):
-        """Refresh port values"""
+        """Refresh port values."""
         self.config(cursor="watch")
         templist = []
         for port in self.alobjports:
@@ -233,7 +233,7 @@ class MainPage(tk.Frame):
         self.refresh()
 
     def portcolor(self) -> list:
-        """Set background colors of connected ports"""
+        """Set background colors of connected ports."""
         pcol = ["", "", "", "", "", "", "", "", "", "", ""]
         for count, port in enumerate(self.stintports):
             if port:
@@ -243,14 +243,14 @@ class MainPage(tk.Frame):
         return pcol
 
     def factory_reset(self):
-        """Factory reset the switch"""
+        """Reset the switch to factory settings."""
         self.config(cursor="watch")
         if mb.askokcancel(title="Warning", message="Do you wish to proceed?"):
             switch.factory_conf()
             sys.exit(0)
 
     def download_config(self):
-        """Download the switch running config"""
+        """Download the switch running config."""
         initial_file = switch.get_sysinfo()[0]
         filename = fd.asksaveasfilename(
             defaultextension=".cfg",
@@ -263,7 +263,7 @@ class MainPage(tk.Frame):
                 config.write(contents)
 
     def apply(self):
-        """Save the running config to startup config"""
+        """Save the running config to startup config."""
         result = switch.save_run2startup()
         if result:
             mb.showinfo(message="Success")
@@ -273,19 +273,19 @@ class MainPage(tk.Frame):
             self.refresh()
 
     def upd_name(self):
-        """Write the new hostname"""
+        """Write the new hostname."""
         switch.set_hostname(self.swname.get())
 
     def upd_loc(self):
-        """Write the new location"""
+        """Write the new location."""
         switch.set_location(self.swloc.get())
 
     def upd_ip(self):
-        """Write the new IP address"""
+        """Write the new IP address."""
         switch.set_mgmt_ip(self.swip.get())
 
     def frnt_refresh(self) -> None:
-        """Refresh the FRNT button"""
+        """Refresh the FRNT button."""
         self.frnt = switch.get_frnt()
         if self.frnt:
             if self.frnt[1]["mode"] == "Focal":
@@ -299,7 +299,7 @@ class MainPage(tk.Frame):
             self.frnt_stat.set(0)
 
     def mgmt_ip_refresh(self) -> str:
-        """Refresh the Management secondary_ip"""
+        """Refresh the Management secondary_ip."""
         self.mgmt_ips = switch.get_mgmt_ip()
         self.mgmt_ip = ""
         for val in self.mgmt_ips:
@@ -311,7 +311,11 @@ class MainPage(tk.Frame):
         return self.mgmt_ip
 
     def save_refresh(self) -> None:
-        """Change background of button6 to indicate if configuration is saved or not"""
+        """
+        Change background of button6.
+
+        This indicates if configuration is saved or not.
+        """
         self.saved = switch.compare_config()
         if not self.saved:
             self.button6.config(background="#FF0000")
@@ -319,25 +323,24 @@ class MainPage(tk.Frame):
             self.button6.config(background="#D9D9D9")
 
     def refresh(self) -> None:
-        """Read and refresh values on screen"""
+        """Read and refresh the values on screen."""
         # Read new values
         self.system = switch.get_sysinfo()
         self.uptime = switch.get_uptime()
         self.portlist: list[dict[str, str]] = switch.get_ports()
-        self.alintports: list[bool] = []
+        self.alintports: list = []
         self.stintports: list[bool] = []
         self.mgmt_ip = self.mgmt_ip_refresh()
         self.frnt_refresh()
         self.mgmt_ip_refresh()
         self.save_refresh()
         for val in self.portlist:
-            self.alintports.append(bool(val["alarm"]))
+            self.alintports.append(val["alarm"])
             self.stintports.append(bool(val["link"]))
 
         for num, val in enumerate(self.alintports):
             if val:
                 self.alobjports[num].set(True)
-        self.saved = switch.compare_config()
         # Delete old values
         self.swname.delete(0, tk.END)
         self.swloc.delete(0, tk.END)
@@ -384,9 +387,10 @@ class MainPage(tk.Frame):
 
 
 class AutoConf(tk.Frame):
-    """Devicewindow GUI for Westermo configurator"""
+    """Devicewindow GUI for Westermo configurator."""
 
     def __init__(self, parent, controller) -> None:
+        """Initialize the class."""
         tk.Frame.__init__(self, parent)
         self.config_file = ConfigFile()
         self.file = ""
@@ -451,7 +455,7 @@ class AutoConf(tk.Frame):
         self.return_button.pack(side="left")
 
     def item_selected(self, event) -> None:
-        """get selected value and write config to switch"""
+        """Get selected value and write the config to switch."""
         _ = event  # Hush some editor warnings
         config = self.tree.item(self.tree.focus())["values"]
         ports = [False, False, False, False, False, False, False, False, False, False]
@@ -483,7 +487,7 @@ class AutoConf(tk.Frame):
             self.refresh()
 
     def bswitch(self) -> None:
-        """On/Off switch"""
+        """Toggle switch On/Off."""
         if self.swconf.get() == 0:
             self.done_button.configure(text="unconfigured")
             self.swconf.set(1)
@@ -493,10 +497,10 @@ class AutoConf(tk.Frame):
         self.refresh()
 
     def refresh(self) -> None:
-        """Refresh the values in the frame"""
+        """Refresh the values in the frame."""
         if self.file == "":
             file = fd.askopenfilename(
-                initialdir="./site/", filetypes=[("Comma Seperated files", ".csv")]
+                initialdir="./site/", filetypes=[("Comma Separated files", ".csv")]
             )
             if file != "":
                 self.file = file
@@ -512,7 +516,7 @@ class AutoConf(tk.Frame):
         label.grid(row=0, column=0)
 
     def read_config(self, file: str) -> list:
-        """Read and parse CSV file according to buttons
+        """Read and parse the CSV file according to buttons.
 
         input:
             csvfile (str)
@@ -566,9 +570,10 @@ class AutoConf(tk.Frame):
 
 
 class LogView(tk.Frame):
-    """Logviewer GUI for Westermo configurator"""
+    """Logviewer GUI for Westermo configurator."""
 
     def __init__(self, parent, controller) -> None:
+        """Initialize the class."""
         tk.Frame.__init__(self, parent)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -591,12 +596,12 @@ class LogView(tk.Frame):
         self.logtext = tk.Text(self.frame1)
 
     def clearlog(self) -> None:
-        """Clear the Eventlog"""
+        """Clear the Eventlog."""
         self.config(cursor="watch")
         self.refresh()
 
     def refresh(self) -> None:
-        """Refresh the values in the frame"""
+        """Refresh the values in the frame."""
         self.clr_button.pack(side="left")
         self.return_button.pack(side="left")
         self.config(cursor="watch")
@@ -609,12 +614,14 @@ class LogView(tk.Frame):
 
 if __name__ == "__main__":
     SWITCH = {
-        "host": "192.168.2.200",
+        # TELNET
+        "host": "127.0.0.1",
+        "port": 2323,
         "auth_username": "admin",
         "auth_password": "westermo",
-        "auth_strict_key": False,
+        "transport": "telnet",
         "platform": "westermo_weos",
     }
-    with Westermo(verbose=True, **SWITCH) as switch:
+    with Westermo(**SWITCH) as switch:
         start = WestermoGUI()
         start.mainloop()

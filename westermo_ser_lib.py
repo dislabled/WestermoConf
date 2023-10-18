@@ -1,31 +1,48 @@
 #!/usr/bin/python3
-""" Westermo_lib.
+"""
+Westermo_lib.
 
-This module uses a ssh connection to communicate with Westermo, 
+This module uses a ssh connection to communicate with Westermo,
 currently only testet on the lynx range for common configuring.
-
-Todo:
-    # set time : configure -> clock set hh:mm:ss month day year
-
-class fileHandler:
-    def __init__(self, dbf):
-        self.logger = logging.getLogger('fileHandler')
-        self.thefilename = dbf
-    def __enter__(self):
-        self.thefile = open(self.thefilename, 'rb')
-        return self
-    def __exit__(self, *args):
-        self.thefile.close()
-
-
 """
 from typing import Any
 import re
+import logging
+from time import sleep
 from ipaddress import ip_address
+from threading import Thread
 from scrapli import Scrapli  # type: ignore
+from telnet2serlib import Handler  # type: ignore
+
+# logging config:
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
+
+def threaded(func):
+    """
+    Decorate function for multithreading.
+
+    Decorator that multithreads the target function
+    with the given parameters. Returns the thread
+    created for the function.
+    """
+
+    def wrapper(*args, **kwargs):
+        thread = Thread(target=func, args=args, kwargs=kwargs)
+        thread.start()
+        return thread
+
+    return wrapper
 
 
 def str_to_dict(string):
+    """Parse a string to a dictionary."""
     string = string.strip("{}")
     pairs = string.split(", ")
     return {
@@ -34,60 +51,67 @@ def str_to_dict(string):
 
 
 class Westermo:
-    """
-    Class for interacting with the westermo switch
-    """
+    """Class for interacting with the westermo switch."""
 
-    def __init__(self, verbose: bool = False, **kwargs) -> None:
-        self.verbose = verbose
+    def __init__(self, **kwargs) -> None:
+        """Initialize the Class."""
+        logger.debug("class init")
         self.DEVICE = kwargs
+        self.telnet2serlib()
+        sleep(0.2)
 
     def __enter__(self):  # -> None:
-        # self.conn = GenericDriver(**self.DEVICE)
+        """Run commands on class enter."""
+        logger.debug("class entered")
         self.conn = Scrapli(**self.DEVICE)
+        logger.debug("Scrapli initialized")
         self.conn.open()
+        logger.debug("Scrapli connection opened")
+        self.set_interactive()
         return self
 
     def __exit__(self, *args) -> None:
+        """Run commands on class exit."""
         _ = args
         self.conn.close()
 
-    def vprint(self, text) -> None:
-        """
-        Prints only when verbose is true
-        """
-        if self.verbose is True:
-            print(f"Westermo_weos: {text}")
+    @threaded
+    def telnet2serlib(self):
+        """Start the telnet to serial shim."""
+        connections = Handler()
+        while True:
+            connections.run()
 
     def get_uptime(self) -> str:
+        """Get the uptime of the switch."""
         uptime = self.conn.send_command("uptime")
-        self.vprint(uptime.result[1:9])
+        logger.debug("uptime: %s", uptime.result[1:9])
         return str(uptime.result[1:9])
 
     def get_sysinfo(self) -> dict:
-        """Gets system info and returns it as a list|dict
+        """Get system info and return it as a list|dict.
 
-        Returns:
+        Return:
             dict: System parameters dictionary
         """
         sysinfo = self.conn.send_command("show system-information")
         return_values: Any = list(
             sysinfo.ttp_parse_output(template="ttp_templates/system-information.txt")
         )[0]
-        self.vprint(f"get_sysinfo function: {return_values}")
+        logger.debug("get_sysinfo function: %s", return_values)
         return return_values
 
     def get_mgmt_ip(self) -> list[dict]:
-        """Gets current management ip info"""
+        """Get current management ip info."""
         ip_mgmt_info = self.conn.send_command("show ifaces")
         return_values: Any = list(
             ip_mgmt_info.ttp_parse_output(template="ttp_templates/show_ifaces.txt")
         )[0]
-        self.vprint(f"get_mgmt_ip function: {return_values}")
+        logger.debug("get_mgmt_ip function: %s", return_values)
         return return_values
 
     def get_ports(self) -> list[dict]:
-        """Gets status of ports, and returns it as a list|dict.
+        """Get status of ports, and return it as a list|dict.
 
         Returns:
             list|dict: Status of all ports
@@ -110,11 +134,11 @@ class Westermo:
                 keys["alarm"] = True
             else:
                 keys["alarm"] = False
-        self.vprint(f"get_ports function: {return_values}")
+        logger.debug("get_ports function: %s", return_values)
         return return_values
 
     def get_frnt(self) -> list | dict:
-        """Gets status of ports, and returns it as a list|dict.
+        """Get status of ports, and returns it as a list|dict.
 
         Returns:
             list|dict: Status of all ports
@@ -123,30 +147,30 @@ class Westermo:
         return_values: Any = list(
             status_ports.ttp_parse_output(template="ttp_templates/show_frnt.txt")
         )[0]
-        self.vprint(f"get_ports function: {status_ports.result}")
+        logger.debug("get_ports function: %s", status_ports.result)
         return return_values
 
-    def set_frtn(self, ports: list[int] = [1, 2]) -> None:
-        """Toggle the FRNT Ring"""
-        if ports == [0]:
+    def set_frtn(self, ports: tuple = (1, 2)) -> None:
+        """Toggle the FRNT Ring."""
+        if ports == (0):
             self.conn.send_config("no frnt 1")
-            self.vprint("set_frnt function: disabling frnt")
+            logger.debug("set_frnt function: disabling frnt")
         else:
             portstr = ",".join(str(x) for x in ports)
             self.conn.send_config(f"frnt 1 ring-ports {portstr}")
-            self.vprint(f"set_frnt function: frnt set on port {portstr}")
+            logger.debug("set_frnt function: frnt set on port %s", portstr)
 
     def set_focal(self, member: bool = True) -> None:
-        """Set member on the FRNT Ring"""
+        """Set member on the FRNT Ring."""
         if member:
             self.conn.send_config("frnt 1 no focal-point")
-            self.vprint("set_focal function: member")
+            logger.debug("set_focal function: member")
         else:
             self.conn.send_config("frnt 1 focal-point")
-            self.vprint("set_focal function: master")
+            logger.debug("set_focal function: master")
 
     def set_alarm(self, alarm: list[bool]) -> None:
-        """Configures alarm when link down for interfaces in list.
+        """Configure alarm when link down for interfaces in list.
 
         value == True is alarm on
 
@@ -167,11 +191,10 @@ class Westermo:
             f"alarm trigger 1 link-alarm condition low port {port_list}"
         )
         self.conn.send_config("alarm action 1 target led,log,digout")
-        self.vprint(alarm)
-        self.vprint(f"set_alarm function: set alarm on ifaces {port_list} ON")
+        logger.debug("set_alarm function: set alarm on ifaces %s ON", port_list)
 
     def set_mgmt_ip(self, ip_add: str) -> bool:
-        """Changes the management ip-address of the switch to (ip)
+        """Change the management ip-address of the switch to (ip).
 
         Args:
             ip_add (str): IP Address to set
@@ -182,10 +205,10 @@ class Westermo:
             ip_address(ip_add)
         except ValueError:
             return False
-        self.vprint("set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24}")
+        logger.debug("set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24}")
         self.conn.send_config("iface vlan1 inet static address 192.168.2.200/24")
         self.conn.send_config("exit")
-        self.vprint("set_mgmt_ip function: removing all secondary ip")
+        logger.debug("set_mgmt_ip function: removing all secondary ip")
         self.conn.send_interactive(
             [
                 (
@@ -198,112 +221,136 @@ class Westermo:
             privilege_level="configuration",
         )
         self.conn.send_config("exit")
-        self.vprint(f"set_mgmt_ip function: setting vlan1 secondary to {ip_add}")
+        logger.debug("set_mgmt_ip function: setting vlan1 secondary to %s", ip_add)
         self.conn.send_config(f"iface vlan1 inet static address {ip_add}/24 secondary")
         return True
 
     def set_hostname(self, hostname: str) -> None:
-        """Changes the hostname of the switch
+        """Change the hostname of the switch.
 
         Args:
             hostname (str): Hostname to switch to
         """
         self.conn.send_config(f"system hostname {hostname}")
-        self.vprint(f"conf_hostname function: set {hostname}")
+        logger.debug("conf_hostname function: set %s", hostname)
+
+    def set_interactive(self, interactive: bool = True) -> None:
+        """Set the interactive mode on the switch.
+
+        This enables paging, but also lets you structure commands fully
+        """
+        if interactive:
+            self.conn.send_command("interactive")
+            logger.debug("Interactive mode set")
+        else:
+            self.conn.send_command("batch")
+            logger.debug("Batch mode set")
 
     def set_location(self, location: str) -> None:
-        """Changes the location parameter of the switch
+        """Change the location parameter of the switch.
 
         Args:
             location (str): location string to switch to
         """
         if location == "":
             self.conn.send_config("no system location")
-            self.vprint("set_location function: removing location")
+            logger.debug("set_location function: removing location")
         else:
             location = re.sub("[^a-zA-Z0-9 \n\\.]", "", location)
             self.conn.send_config(f"system location '{location}'")
-            self.vprint(f"set_location function: set to: {location}")
+            logger.debug("set_location function: set to: %s", location)
 
     def factory_conf(self) -> None:
-        """Reset device to factory defaults"""
+        """Reset device to factory defaults."""
         self.conn.send_interactive(
             [("factory-reset", "=> Are you sure (y/N)?", False), ("y", "", False)]
         )
-        self.vprint("factory_conf function: Factory defaults set")
+        logger.debug("factory_conf function: Factory defaults set")
 
     def save_run2startup(self) -> bool:
-        """Saves the configuration from running to startup"""
+        """Save the configuration from running to startup."""
         response = self.conn.send_command("copy run start")
-        self.vprint(f"save_run2startup function: {response.result}")
+        logger.debug("save_run2startup function: %s", response.result)
         if response.result != "":
             return False
         return True
 
     def save_config(self) -> str:
-        """Gets the startup config and returns it as a decoded string
+        """Get the startup config and returns it as a decoded string.
 
         Returns:
             config (str)
         """
+        self.set_interactive(False)
         config = self.conn.send_command("show startup-config").result
+        self.set_interactive(True)
         return config
 
     def compare_config(self) -> bool:
-        """Compares the running and startup config and returns status
+        """Compare the running and startup config and returns status.
 
         Returns:
             status (bool): True = Match
                            False = Mismatch
         """
+        self.set_interactive(False)
         raw_startup = self.conn.send_command("show startup-config").result
         parsed_startup = "".join(raw_startup.splitlines(keepends=True)[:-4]).rstrip()
         raw_running = self.conn.send_command("show running-config").result
+        self.set_interactive(True)
         if parsed_startup == raw_running:
-            self.vprint("compare_config function: True")
+            logger.debug("compare_config function: True")
             return True
-        self.vprint("compare_config function: False")
+        logger.debug("compare_config function: False")
         return False
 
     def get_alarm_log(self) -> list | dict:
-        """Returns the alarm log as a list | dict
+        """Return the alarm log as a list | dict.
 
         Returns:
             eventlog (list | dict)
         """
-        self.vprint("get_alarm_log function: ")
+        logger.debug("get_alarm_log function: ")
         returnobj = self.conn.send_command("show alarm")
         return_values: Any = list(
             returnobj.ttp_parse_output(template="ttp_templates/alarm_log.txt")
         )[0]
-        self.vprint(return_values)
+        logger.debug(return_values)
         return return_values
 
     def get_event_log(self) -> str:
-        """Returns the event list as a list | dict
+        """Return the event list as a list | dict.
 
         Returns:
             log (str)
         """
-        self.vprint("get_event_log function: ")
+        logger.debug("get_event_log function: ")
+        self.set_interactive(False)
         return_values = self.conn.send_command("alarm log").result
-        self.vprint(return_values)
+        self.set_interactive(True)
+        logger.debug(return_values)
         return return_values
 
 
 if __name__ == "__main__":
     SWITCH = {
-        "host": "192.168.2.200",
+        "host": "127.0.0.1",
+        "port": 2323,
         "auth_username": "admin",
         "auth_password": "westermo",
-        "auth_strict_key": False,
         "platform": "westermo_weos",
+        "transport": "telnet",
+        # "host": "192.168.2.200",
+        # "auth_username": "admin",
+        # "auth_password": "westermo",
+        # "auth_strict_key": False,
+        # "platform": "westermo_weos",
     }
     # alarms = [False,False,False,False,False,False,False,True,False,True]
-
-    with Westermo(verbose=True, **SWITCH) as switch:
+    with Westermo(**SWITCH) as switch:
+        switch.set_interactive()
         switch.get_sysinfo()
-        # switch.get_uptime()
+        switch.get_uptime()
         # switch.get_ports()
         # switch.save_config()
         # switch.compare_config()
