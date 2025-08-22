@@ -198,6 +198,11 @@ class Westermo:
             except Exception as e:
                 logger.warning("Error during disconnect: %s", str(e))
 
+    def _validate_connection(self) -> None:
+        """Validate that connection is established before operations."""
+        if not hasattr(self, "conn") or self.conn is None:
+            raise NetworkError("Not connected to device. Use 'with Westermo(...):' context manager.")
+
     @threaded
     def telnet2serlib(self):
         """Start the telnet to serial shim."""
@@ -217,6 +222,8 @@ class Westermo:
         Raises:
             NetworkError: If unable to retrieve uptime
         """
+        self._validate_connection()
+
         try:
             uptime = self.conn.send_command("uptime")
 
@@ -249,6 +256,8 @@ class Westermo:
             NetworkError: If unable to communicate with device
             ParseError: If unable to parse device response
         """
+        self._validate_connection()
+
         try:
             sysinfo = self.conn.send_command("show system-information")
 
@@ -268,7 +277,6 @@ class Westermo:
             raise
         except Exception as e:
             logger.error("Failed to get system info: %s", str(e))
-            raise NetworkError(f"System info retrieval failed: {str(e)}")
 
     def get_mgmt_ip(self) -> list[dict]:
         """Get current management ip info.
@@ -280,6 +288,8 @@ class Westermo:
             NetworkError: If unable to retrieve interface information
             ParseError: If unable to parse response
         """
+        self._validate_connection()
+
         try:
             ip_mgmt_info = self.conn.send_command("show ifaces")
 
@@ -310,6 +320,8 @@ class Westermo:
             NetworkError: If unable to retrieve port information
             ParseError: If unable to parse port data
         """
+        self._validate_connection()
+
         try:
             status_ports = self.conn.send_command("show port")
 
@@ -325,18 +337,18 @@ class Westermo:
 
             for keys in return_values:
                 try:
-                    keys["port"] = int(keys["port"][4:])
+                    keys["port"] = int(keys["port"][4:])  # Remove "Eth " prefix
                     keys["vid"] = int(keys["vid"])
-                    if keys["link"] == "UP":
-                        keys["link"] = True
-                    else:
-                        keys["link"] = False
-                    if keys["alarm"] == "ALARM":
+                    keys["link"] = keys["link"] == "UP"
+
+                    alarm_status = keys.get("alarm", "N/A")
+                    if alarm_status == "ALARM":
                         keys["alarm"] = True
-                    elif keys["alarm"] == "None":
-                        keys["alarm"] = True
+                    elif alarm_status == "None":
+                        keys["alarm"] = False
                     else:
                         keys["alarm"] = False
+
                 except (ValueError, KeyError) as e:
                     logger.warning("Error processing port data: %s", str(e))
 
@@ -358,6 +370,8 @@ class Westermo:
         Raises:
             NetworkError: If unable to retrieve FRNT information
         """
+        self._validate_connection()
+
         try:
             status_ports = self.conn.send_command("show frnt")
 
@@ -381,22 +395,33 @@ class Westermo:
             ports (tuple): Ports to configure for FRNT ring
 
         Raises:
+            ValidationError: If port configuration is invalid
             NetworkError: If configuration fails
         """
+        self._validate_connection()
+
         try:
-            if ports == (0):
+            if ports == (0,):  # Note: should be (0,) not (0)
                 result = self.conn.send_config("no frnt 1")
                 if result.failed:
                     raise ConfigurationError(f"Failed to disable FRNT: {result.result}")
                 logger.debug("set_frnt function: disabling frnt")
             else:
+                # Validate ports
+                if not ports or len(ports) > 2:
+                    raise ValidationError("FRNT requires exactly 1 or 2 ports")
+
+                for port in ports:
+                    if not isinstance(port, int) or port < 1 or port > 48:
+                        raise ValidationError(f"Invalid port number: {port}")
+
                 portstr = ",".join(str(x) for x in ports)
                 result = self.conn.send_config(f"frnt 1 ring-ports {portstr}")
                 if result.failed:
                     raise ConfigurationError(f"Failed to set FRNT ports: {result.result}")
                 logger.debug("set_frnt function: frnt set on port %s", portstr)
 
-        except ConfigurationError:
+        except (ValidationError, ConfigurationError):
             raise
         except Exception as e:
             logger.error("Error configuring FRNT: %s", str(e))
@@ -411,6 +436,8 @@ class Westermo:
         Raises:
             NetworkError: If configuration fails
         """
+        self._validate_connection()
+
         try:
             if member:
                 result = self.conn.send_config("frnt 1 no focal-point")
@@ -432,14 +459,22 @@ class Westermo:
     def set_alarm(self, alarm: list[bool]) -> None:
         """Configure alarm when link down for interfaces in list.
 
-        value == True is alarm on
-
         Args:
             alarm (list): interfaces with alarm on or off
 
         Raises:
+            ValidationError: If alarm list is invalid
             NetworkError: If configuration fails
         """
+        self._validate_connection()
+
+        if len(alarm) > 48:  # Most switches have max 48 ports
+            raise ValidationError("Too many ports specified (max 48)")
+
+        if not alarm:  # Empty list
+            logger.info("No alarm configuration provided")
+            return
+
         enabled_ports = [str(i + 1) for i, enabled in enumerate(alarm) if enabled]
         port_list = ",".join(enabled_ports)
 
@@ -466,7 +501,7 @@ class Westermo:
 
             logger.debug("set_alarm function: set alarm on ifaces %s ON", port_list)
 
-        except ConfigurationError:
+        except (ValidationError, ConfigurationError):
             raise
         except Exception as e:
             logger.error("Error configuring alarms: %s", str(e))
@@ -484,6 +519,8 @@ class Westermo:
         Raises:
             ValidationError: If IP address format is invalid
         """
+        self._validate_connection()
+
         try:
             validated_ip, ip_with_cidr = InputValidator.validate_ip_with_cidr(ip_add)
 
@@ -539,6 +576,8 @@ class Westermo:
             ValidationError: If hostname is invalid
             NetworkError: If configuration fails
         """
+        self._validate_connection()
+
         try:
             validated_hostname = InputValidator.validate_hostname(hostname)
 
@@ -565,6 +604,8 @@ class Westermo:
         Args:
             interactive (bool): True for interactive mode, False for batch mode
         """
+        self._validate_connection()
+
         try:
             if interactive:
                 result = self.conn.send_command("interactive")
@@ -591,6 +632,8 @@ class Westermo:
             ValidationError: If location format is invalid
             NetworkError: If configuration fails
         """
+        self._validate_connection()
+
         try:
             if location == "":
                 result = self.conn.send_config("no system location")
@@ -619,6 +662,8 @@ class Westermo:
         Raises:
             NetworkError: If factory reset fails
         """
+        self._validate_connection()
+
         try:
             logger.warning("Initiating factory reset - this will erase all configuration")
 
@@ -641,6 +686,8 @@ class Westermo:
         Returns:
             bool: True if successful, False otherwise
         """
+        self._validate_connection()
+
         try:
             response = self.conn.send_command("copy run start")
             logger.debug("save_run2startup function: %s", response.result)
@@ -656,45 +703,78 @@ class Westermo:
             logger.error("Error saving configuration: %s", str(e))
             return False
 
-    def save_config(self) -> str:
-        """Get the startup config and returns it as a decoded string.
 
-        Returns:
-            str: config string
-        """
-        try:
-            self.set_interactive(False)
-            config = self.conn.send_command("show startup-config").result
-            self.set_interactive(True)
-            return config
-        except Exception as e:
-            logger.error("Error retrieving config: %s", str(e))
-            self.set_interactive(True)
-            return ""
+def save_config(self) -> str:
+    """Get the startup config and returns it as a decoded string.
+
+    Returns:
+        str: config string
+
+    Raises:
+        NetworkError: If unable to retrieve configuration
+    """
+    self._validate_connection()
+
+    try:
+        self.set_interactive(False)
+        result = self.conn.send_command("show startup-config")
+
+        if result.failed:
+            raise NetworkError(f"Failed to retrieve startup config: {result.result}")
+
+        config = result.result
+        self.set_interactive(True)
+        logger.debug("Successfully retrieved startup configuration")
+        return config
+
+    except NetworkError:
+        self.set_interactive(True)
+        raise
+    except Exception as e:
+        logger.error("Error retrieving config: %s", str(e))
+        self.set_interactive(True)
+        raise NetworkError(f"Configuration retrieval failed: {str(e)}")
 
     def compare_config(self) -> bool:
         """Compare the running and startup config and returns status.
 
         Returns:
             bool: True = Match, False = Mismatch
+
+        Raises:
+            NetworkError: If unable to retrieve configurations
         """
+        self._validate_connection()
+
         try:
             self.set_interactive(False)
-            raw_startup = self.conn.send_command("show startup-config").result
+
+            startup_result = self.conn.send_command("show startup-config")
+            if startup_result.failed:
+                raise NetworkError(f"Failed to get startup config: {startup_result.result}")
+
+            running_result = self.conn.send_command("show running-config")
+            if running_result.failed:
+                raise NetworkError(f"Failed to get running config: {running_result.result}")
+
+            # Process startup config (remove footer)
+            raw_startup = startup_result.result
             parsed_startup = "".join(raw_startup.splitlines(keepends=True)[:-4]).rstrip()
-            raw_running = self.conn.send_command("show running-config").result
+            raw_running = running_result.result
+
             self.set_interactive(True)
 
-            if parsed_startup == raw_running:
-                logger.debug("compare_config function: True")
-                return True
-            logger.debug("compare_config function: False")
-            return False
+            configs_match = parsed_startup == raw_running
+            logger.debug("compare_config function: %s", configs_match)
+            return configs_match
 
+        except NetworkError:
+            self.set_interactive(True)
+            raise
         except Exception as e:
             logger.error("Error comparing configurations: %s", str(e))
             self.set_interactive(True)
-            return False
+            raise NetworkError(f"Configuration comparison failed: {str(e)}")
 
     def get_alarm_log(self) -> list | dict:
         """Return the alarm log as a list | dict.
@@ -705,6 +785,8 @@ class Westermo:
         Raises:
             NetworkError: If unable to retrieve alarm log
         """
+        self._validate_connection()
+
         try:
             logger.debug("get_alarm_log function: ")
             returnobj = self.conn.send_command("show alarm")
@@ -728,6 +810,8 @@ class Westermo:
         Returns:
             str: log
         """
+        self._validate_connection()
+
         try:
             logger.debug("get_event_log function: ")
             self.set_interactive(False)
