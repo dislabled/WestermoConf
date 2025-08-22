@@ -167,10 +167,15 @@ class Westermo:
 
     def __init__(self, **kwargs) -> None:
         """Initialize the Class."""
+        from config import Config
+
+        device_config = Config.get_device_config()
+        device_config.update(kwargs)
+
         safe_params = {k: v for k, v in kwargs.items() if k not in ["auth_password", "password"]}
         logger.info("Initializing Westermo connection: %s", safe_params)
 
-        self.DEVICE = kwargs
+        self.DEVICE = device_config
 
         # Only start telnet2serial bridge if we're using telnet transport
         if kwargs.get("transport") == "telnet" and kwargs.get("port") == 2323:
@@ -212,8 +217,16 @@ class Westermo:
     @threaded
     def telnet2serlib(self):
         """Start the telnet to serial shim."""
+
+        from config import Config
         try:
-            connections = Handler()
+            connections = Handler(
+                tel_port=Config.TELNET_PORT,
+                ser_port=Config.SERIAL_PORT,
+                baud=Config.SERIAL_BAUD,
+                timeout=Config.SERIAL_TIMEOUT,
+                xonxoff=Config.SERIAL_XONXOFF
+            )
             while True:
                 connections.run()
         except Exception as e:

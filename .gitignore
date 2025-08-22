@@ -3,6 +3,21 @@
 site/
 test.py
 
+# Log files and directories
+logs/
+*.log
+westermo.log*
+audit.log*
+
+# westermo scrapli application
+westermo_configurator.egg-info/
+scrapli_community.egg-info/
+
+# General packaging files
+*.egg-info/
+pip-wheel-metadata/
+setup.py.bak
+pyproject.toml.bak
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

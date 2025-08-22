@@ -2,14 +2,14 @@
 # coding=utf-8
 """A GUI configurator for Westermo weos switches."""
 import sys
-import os
-import types
 import tkinter as tk
 from tkinter import BooleanVar, messagebox as mb
 from tkinter import filedialog as fd
 from tkinter import ttk
 from westermo_ser_lib import Westermo
 from csv_lib import ConfigFile
+from config import Config
+from logging_config import setup_logging
 
 
 class WestermoGUI(tk.Tk):
@@ -18,7 +18,7 @@ class WestermoGUI(tk.Tk):
     def __init__(self, *args, **kwargs) -> None:
         """Initialize the class."""
         tk.Tk.__init__(self, *args, **kwargs)
-        self.wm_title("Westermo Configurator")
+        self.wm_title(Config.WINDOW_TITLE)
         self.resizable(False, False)
         # self.bind("<Escape>", lambda _: self.destroy())
         self.bind("<Escape>", lambda _: self.show_frame(MainPage))
@@ -234,9 +234,11 @@ class MainPage(tk.Frame):
     def download_config(self):
         """Download the switch running config."""
         initial_file = switch.get_sysinfo()[0]
+        from config import Config
+
         filename = fd.asksaveasfilename(
             defaultextension=".cfg",
-            initialdir="./site/configs/",
+            initialdir=Config.CONFIG_DIRECTORY,
             initialfile=initial_file,
         )
         if filename != ():
@@ -475,7 +477,9 @@ class AutoConf(tk.Frame):
     def refresh(self) -> None:
         """Refresh the values in the frame."""
         if self.file == "":
-            file = fd.askopenfilename(initialdir="./site/", filetypes=[("Comma Separated files", ".csv")])
+            from config import Config
+
+            file = fd.askopenfilename(Config.CSV_DIRECTORY, filetypes=[("Comma Separated files", ".csv")])
             if file != "":
                 self.file = file
 
@@ -583,15 +587,49 @@ class LogView(tk.Frame):
 
 
 if __name__ == "__main__":
-    SWITCH = {
-        # TELNET
-        "host": "127.0.0.1",
-        "port": 2323,
-        "auth_username": "admin",
-        "auth_password": "westermo",
-        "transport": "telnet",
-        "platform": "westermo_weos",
-    }
-    with Westermo(**SWITCH) as switch:
-        start = WestermoGUI()
-        start.mainloop()
+    from logging_config import setup_logging
+
+    setup_logging()
+
+    from config import Config
+    from westermo_ser_lib import Westermo
+    import os
+    import sys
+
+    # Check for serial device before doing anything else
+    if not os.path.exists(Config.SERIAL_PORT):
+        print(f"\n❌ ERROR: Serial device {Config.SERIAL_PORT} not found!")
+        print("\nThis application requires a serial device to communicate with Westermo switches.")
+        print("Please:")
+        print("  1. Connect your USB-to-serial adapter")
+        print(f"  2. Check that {Config.SERIAL_PORT} exists")
+        print(f"  3. Or update {Config.SERIAL_PORT} in config.py to the correct device")
+        print("\nCommon serial devices:")
+        print("  - Linux: /dev/ttyUSB0, /dev/ttyACM0")
+        print("  - macOS: /dev/cu.usbserial-*")
+        print("\nExiting...")
+        sys.exit(1)
+
+    # Check device permissions
+    if not os.access(Config.SERIAL_PORT, os.R_OK | os.W_OK):
+        print(f"\n❌ ERROR: No permission to access {Config.SERIAL_PORT}")
+        print(f"Please run: sudo chmod 666 {Config.SERIAL_PORT}")
+        print("Or add your user to the dialout group:")
+        print("  sudo usermod -a -G dialout $USER")
+        print("  (then logout and login again)")
+        print("\nExiting...")
+        sys.exit(1)
+
+    print(f"✓ Serial device {Config.SERIAL_PORT} found and accessible")
+    print("Starting Westermo Configurator...")
+
+    try:
+        with Westermo(**Config.get_device_config()) as switch:
+            start = WestermoGUI()
+            start.mainloop()
+    except KeyboardInterrupt:
+        print("\nApplication stopped by user")
+    except Exception as e:
+        print(f"\n❌ Application error: {e}")
+        print("Check the logs for more details")
+        sys.exit(1)

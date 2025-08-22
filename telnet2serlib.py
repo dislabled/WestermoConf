@@ -2,6 +2,7 @@
 # -*- coding=utf-8 -*-
 """Library to make a telnet to serial shim."""
 
+import os
 import sys
 import logging
 from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
@@ -74,23 +75,34 @@ class Handler:
 
     def __init__(
         self,
-        tel_port: int = 2323,
-        ser_port: str = "/dev/ttyUSB0",
-        baud: int = 115200,
-        timeout: int = 1,
-        xonxoff: bool = True,
+        tel_port: int = None,
+        ser_port: str = None,
+        baud: int = None,
+        timeout: int = None,
+        xonxoff: bool = None,
     ) -> None:
         """Initialize the class."""
-        self.tel_port = tel_port
+        from config import Config
 
-        # Try to initialize serial connection, handle gracefully if device not found
+        # Use config defaults if not provided
+        self.tel_port = tel_port or Config.TELNET_PORT
+        self.ser_port = ser_port or Config.SERIAL_PORT
+        baud = baud or Config.SERIAL_BAUD
+        timeout = timeout or Config.SERIAL_TIMEOUT
+        xonxoff = xonxoff if xonxoff is not None else Config.SERIAL_XONXOFF
+
+        # Check if serial device exists before trying to connect
+        if not os.path.exists(self.ser_port):
+            logger.error(f"Serial device {self.ser_port} not found!")
+            logger.error("Please connect the serial device or update the SERIAL_PORT in config.py")
+            sys.exit(1)  # Exit gracefully with error code
+
         try:
-            self.com = Serial(port=ser_port, baudrate=baud, timeout=timeout, xonxoff=xonxoff)
-            logger.info(f"Serial connection established on {ser_port}")
-        except (SerialException, FileNotFoundError) as e:
-            logger.warning(f"Serial device {ser_port} not available: {e}")
-            logger.info("Running without serial device - telnet bridge will not function")
-            self.com = None
+            self.com = Serial(port=self.ser_port, baudrate=baud, timeout=timeout, xonxoff=xonxoff)
+        except SerialException as e:
+            logger.error(f"Failed to open serial port {self.ser_port}: {e}")
+            logger.error("Please check the serial device permissions or configuration")
+            sys.exit(1)  # Exit gracefully with error code
 
         self.clist: list = []
         self.start_new_listener()
@@ -153,9 +165,24 @@ class Handler:
 
 
 if __name__ == "__main__":
+    from config import Config
+
+    logger.info(f"Starting telnet-to-serial bridge on port {Config.TELNET_PORT}")
+    logger.info(f"Serial device: {Config.SERIAL_PORT}")
+
     try:
-        connections = Handler()
+        connections = Handler(
+            tel_port=Config.TELNET_PORT,
+            ser_port=Config.SERIAL_PORT,
+            baud=Config.SERIAL_BAUD,
+            timeout=Config.SERIAL_TIMEOUT,
+            xonxoff=Config.SERIAL_XONXOFF,
+        )
+        logger.info("Telnet-to-serial bridge started successfully")
         while True:
             connections.run()
     except KeyboardInterrupt:
-        print("Keyboard Interrupt")
+        logger.info("Telnet-to-serial bridge stopped by user")
+    except Exception as e:
+        logger.error(f"Telnet bridge failed: {e}")
+        sys.exit(1)
