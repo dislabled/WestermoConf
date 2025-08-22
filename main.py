@@ -2,6 +2,8 @@
 # coding=utf-8
 """A GUI configurator for Westermo weos switches."""
 import sys
+import os
+import types
 import tkinter as tk
 from tkinter import BooleanVar, messagebox as mb
 from tkinter import filedialog as fd
@@ -66,48 +68,32 @@ class MainPage(tk.Frame):
             BooleanVar(),
         ]
 
-        tk.Label(self.frame0, text="Name: ").grid(
-            row=0, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="Name: ").grid(row=0, column=0, sticky="w", padx=5, pady=1)
         self.swname = tk.Entry(self.frame0, width=24)
         self.swname.grid(row=0, column=1, sticky="w", padx=5, pady=1)
         self.upd_btn1 = tk.Button(self.frame0, text="Update", command=self.upd_name)
         self.upd_btn1.grid(row=0, column=2)
-        tk.Label(self.frame0, text="Location: ").grid(
-            row=1, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="Location: ").grid(row=1, column=0, sticky="w", padx=5, pady=1)
         self.swloc = tk.Entry(self.frame0, width=24)
         self.swloc.grid(row=1, column=1, sticky="w", padx=5, pady=1)
         self.upd_btn2 = tk.Button(self.frame0, text="Update", command=self.upd_loc)
         self.upd_btn2.grid(row=1, column=2)
-        tk.Label(self.frame0, text="Description: ").grid(
-            row=2, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="Description: ").grid(row=2, column=0, sticky="w", padx=5, pady=1)
         self.swdesc = tk.Text(self.frame0, height=1, width=24)
         self.swdesc.grid(row=2, column=1, sticky="w", padx=5, pady=1)
-        tk.Label(self.frame0, text="MAC addr: ").grid(
-            row=3, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="MAC addr: ").grid(row=3, column=0, sticky="w", padx=5, pady=1)
         self.swmac = tk.Text(self.frame0, height=1, width=17)
         self.swmac.grid(row=3, column=1, sticky="w", padx=5, pady=1)
-        tk.Label(self.frame0, text="Uptime: ").grid(
-            row=4, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="Uptime: ").grid(row=4, column=0, sticky="w", padx=5, pady=1)
         self.swupt = tk.Text(self.frame0, height=1, width=12)
         self.swupt.grid(row=4, column=1, sticky="w", padx=5, pady=1)
-        tk.Label(self.frame0, text="Model ver: ").grid(
-            row=5, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="Model ver: ").grid(row=5, column=0, sticky="w", padx=5, pady=1)
         self.swver = tk.Text(self.frame0, height=1, width=24)
         self.swver.grid(row=5, column=1, sticky="w", padx=5, pady=1)
-        tk.Label(self.frame0, text="FW ver: ").grid(
-            row=6, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="FW ver: ").grid(row=6, column=0, sticky="w", padx=5, pady=1)
         self.swswv = tk.Text(self.frame0, height=1, width=24)
         self.swswv.grid(row=6, column=1, sticky="w", padx=5, pady=1)
-        tk.Label(self.frame0, text="IP address: ").grid(
-            row=7, column=0, sticky="w", padx=5, pady=1
-        )
+        tk.Label(self.frame0, text="IP address: ").grid(row=7, column=0, sticky="w", padx=5, pady=1)
         self.swip = tk.Entry(self.frame0, width=24)
         self.swip.grid(row=7, column=1, sticky="w", padx=5, pady=1)
         self.upd_btn3 = tk.Button(self.frame0, text="Update", command=self.upd_ip)
@@ -188,9 +174,7 @@ class MainPage(tk.Frame):
         self.frnt_button.grid(row=7, columnspan=4, padx=0)
         self.frnt_stat = tk.IntVar(value=0)
 
-        button1 = tk.Button(
-            self.frame2, text="download config", command=self.download_config
-        )
+        button1 = tk.Button(self.frame2, text="download config", command=self.download_config)
         button1.grid(row=0, column=0)
         button3 = tk.Button(
             self.frame2,
@@ -198,9 +182,7 @@ class MainPage(tk.Frame):
             command=lambda: controller.show_frame(AutoConf),
         )
         button3.grid(row=0, column=2)
-        button4 = tk.Button(
-            self.frame2, text="factory reset", command=self.factory_reset
-        )
+        button4 = tk.Button(self.frame2, text="factory reset", command=self.factory_reset)
         button4.grid(row=1, column=0)
         button5 = tk.Button(
             self.frame2,
@@ -404,9 +386,7 @@ class AutoConf(tk.Frame):
         self.frame2.grid(row=2, column=0, sticky="nsew")
         # Treeview
         self.columns = ("cab", "sw_ip", "loc")
-        self.tree = ttk.Treeview(
-            self.frame1, columns=self.columns, show="headings", height=30
-        )
+        self.tree = ttk.Treeview(self.frame1, columns=self.columns, show="headings", height=30)
         self.tree.column("cab", width=150, anchor=tk.NW)
         self.tree.column("sw_ip", width=150, anchor=tk.NW)
         self.tree.column("loc", width=350, anchor=tk.NW)
@@ -414,17 +394,13 @@ class AutoConf(tk.Frame):
         self.tree.heading("sw_ip", text="Switch IP")
         self.tree.heading("loc", text="Location")
         self.tree.bind("<Double-1>", self.item_selected)
-        self.scrollbar = ttk.Scrollbar(
-            self.frame1, orient=tk.VERTICAL, command=self.tree.yview
-        )
+        self.scrollbar = ttk.Scrollbar(self.frame1, orient=tk.VERTICAL, command=self.tree.yview)
         self.scrollbar.pack(fill=tk.BOTH, expand=True, side="right")
         self.tree.pack(fill=tk.BOTH, expand=1)
         # Buttons
         self.swconf = tk.IntVar(value=0)
         self.swmainred = tk.IntVar(value=0)
-        self.done_button = tk.Button(
-            self.frame0, text="all switches", width=10, command=self.bswitch
-        )
+        self.done_button = tk.Button(self.frame0, text="all switches", width=10, command=self.bswitch)
         self.done_button.pack(side="left")
         self.main_button = tk.Radiobutton(
             self.frame0,
@@ -499,9 +475,7 @@ class AutoConf(tk.Frame):
     def refresh(self) -> None:
         """Refresh the values in the frame."""
         if self.file == "":
-            file = fd.askopenfilename(
-                initialdir="./site/", filetypes=[("Comma Separated files", ".csv")]
-            )
+            file = fd.askopenfilename(initialdir="./site/", filetypes=[("Comma Separated files", ".csv")])
             if file != "":
                 self.file = file
 
@@ -531,9 +505,7 @@ class AutoConf(tk.Frame):
                 if self.swconf.get() == 0:
                     # Only Main
                     if self.swmainred.get() == 0:
-                        config.append(
-                            (row["Cabinet"], row["Switch IP address"], row["Position"])
-                        )
+                        config.append((row["Cabinet"], row["Switch IP address"], row["Position"]))
                     # Only Reserve
                     else:
                         if row["DIPB"] != "":
@@ -580,9 +552,7 @@ class LogView(tk.Frame):
         # Frame 0 BUTTONS:
         self.frame0 = tk.Frame(self)
         self.frame0.grid(row=0, column=0, sticky="n")
-        self.clr_button = tk.Button(
-            self.frame0, text="Clear Log", width=10, command=lambda: self.clearlog()
-        )
+        self.clr_button = tk.Button(self.frame0, text="Clear Log", width=10, command=lambda: self.clearlog())
         self.return_button = tk.Button(
             self.frame0,
             text="Return",

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "westermo-configurator"
+version = "0.1.0"
+description = "Westermo WeOS configurator"
+dependencies = [
+    "scrapli>=2025.1.30",
+    "scrapli_community>=2025.1.30",
+    "pyserial>=3.5",
+    "ttp>=0.9.5",
+]
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+include = ["scrapli_community*"]
