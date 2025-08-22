@@ -5,23 +5,136 @@ Westermo_lib.
 This module uses a ssh connection to communicate with Westermo,
 currently only testet on the lynx range for common configuring.
 """
-from typing import Any
+from typing import Any, Tuple
 import re
 import logging
 from time import sleep
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network, AddressValueError
 from threading import Thread
 from scrapli import Scrapli  # type: ignore
 from telnet2serlib import Handler  # type: ignore
 
-# logging config:
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+
+# Custom exceptions for better error handling
+class WestermoError(Exception):
+    """Base exception for Westermo operations."""
+
+    pass
+
+
+class NetworkError(WestermoError):
+    """Network communication errors."""
+
+    pass
+
+
+class ValidationError(WestermoError):
+    """Input validation errors."""
+
+    pass
+
+
+class ParseError(WestermoError):
+    """Data parsing errors."""
+
+    pass
+
+
+class ConfigurationError(WestermoError):
+    """Device configuration errors."""
+
+    pass
+
+
+# Enhanced logging configuration
+def setup_logging():
+    """Set up consistent logging configuration."""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    if not logger.handlers:
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+    return logger
+
+
+logger = setup_logging()
+
+
+class InputValidator:
+    """Input validation utilities for Westermo devices."""
+
+    HOSTNAME_PATTERN = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$")
+
+    @staticmethod
+    def validate_hostname(hostname: str) -> str:
+        """Validate and sanitize hostname.
+
+        Args:
+            hostname (str): Hostname string to validate
+
+        Returns:
+            str: Sanitized hostname
+
+        Raises:
+            ValidationError: If hostname is invalid
+        """
+        if not hostname or not hostname.strip():
+            raise ValidationError("Hostname cannot be empty")
+
+        hostname = hostname.strip()
+
+        if len(hostname) > 63:
+            raise ValidationError("Hostname too long (max 63 characters)")
+
+        if not InputValidator.HOSTNAME_PATTERN.match(hostname):
+            raise ValidationError("Invalid hostname format. Use only letters, numbers, and hyphens.")
+
+        return hostname.lower()
+
+    @staticmethod
+    def validate_ip_with_cidr(ip_str: str) -> Tuple[str, str]:
+        """Validate IP address and return with CIDR notation.
+
+        Args:
+            ip_str (str): IP address string (with or without CIDR)
+
+        Returns:
+            Tuple[str, str]: (ip_address, network_with_cidr)
+
+        Raises:
+            ValidationError: If IP address is invalid
+        """
+        if not ip_str or not ip_str.strip():
+            raise ValidationError("IP address cannot be empty")
+
+        ip_str = ip_str.strip()
+
+        try:
+            if "/" in ip_str:
+                ip_part, cidr_part = ip_str.split("/", 1)
+                cidr = int(cidr_part)
+                if not 0 <= cidr <= 32:
+                    raise ValidationError("CIDR must be between 0 and 32")
+            else:
+                ip_part = ip_str
+                cidr = 24
+
+            validated_ip = ip_address(ip_part)
+
+            if validated_ip.is_loopback:
+                raise ValidationError("Cannot use loopback address")
+            if validated_ip.is_multicast:
+                raise ValidationError("Cannot use multicast address")
+
+            return str(validated_ip), f"{validated_ip}/{cidr}"
+
+        except (ValueError, AddressValueError) as e:
+            raise ValidationError(f"Invalid IP address: {str(e)}")
 
 
 def threaded(func):
@@ -35,6 +148,7 @@ def threaded(func):
 
     def wrapper(*args, **kwargs):
         thread = Thread(target=func, args=args, kwargs=kwargs)
+        thread.daemon = True
         thread.start()
         return thread
 
@@ -45,9 +159,7 @@ def str_to_dict(string):
     """Parse a string to a dictionary."""
     string = string.strip("{}")
     pairs = string.split(", ")
-    return {
-        key[1:-2]: str(value) for key, value in (pair.split(": ") for pair in pairs)
-    }
+    return {key[1:-2]: str(value) for key, value in (pair.split(": ") for pair in pairs)}
 
 
 class Westermo:
@@ -55,119 +167,267 @@ class Westermo:
 
     def __init__(self, **kwargs) -> None:
         """Initialize the Class."""
-        logger.debug("class init")
+        safe_params = {k: v for k, v in kwargs.items() if k not in ["auth_password", "password"]}
+        logger.info("Initializing Westermo connection: %s", safe_params)
+
         self.DEVICE = kwargs
         self.telnet2serlib()
         sleep(0.2)
 
-    def __enter__(self):  # -> None:
+    def __enter__(self):
         """Run commands on class enter."""
-        logger.debug("class entered")
-        self.conn = Scrapli(**self.DEVICE)
-        logger.debug("Scrapli initialized")
-        self.conn.open()
-        logger.debug("Scrapli connection opened")
-        self.set_interactive()
-        return self
+        logger.info("Establishing connection to Westermo device")
+        try:
+            self.conn = Scrapli(**self.DEVICE)
+            logger.debug("Scrapli initialized")
+            self.conn.open()
+            logger.info("Scrapli connection opened")
+            self.set_interactive()
+            return self
+        except Exception as e:
+            logger.error("Failed to connect: %s", str(e))
+            raise NetworkError(f"Connection failed: {str(e)}")
 
     def __exit__(self, *args) -> None:
         """Run commands on class exit."""
         _ = args
-        self.conn.close()
+        if hasattr(self, "conn") and self.conn:
+            try:
+                self.conn.close()
+                logger.info("Disconnected from Westermo device")
+            except Exception as e:
+                logger.warning("Error during disconnect: %s", str(e))
 
     @threaded
     def telnet2serlib(self):
         """Start the telnet to serial shim."""
-        connections = Handler()
-        while True:
-            connections.run()
+        try:
+            connections = Handler()
+            while True:
+                connections.run()
+        except Exception as e:
+            logger.error("Telnet bridge error: %s", str(e))
 
     def get_uptime(self) -> str:
-        """Get the uptime of the switch."""
-        uptime = self.conn.send_command("uptime")
-        logger.debug("uptime: %s", uptime.result[1:9])
-        return str(uptime.result[1:9])
+        """Get the uptime of the switch.
+
+        Returns:
+            str: Device uptime string
+
+        Raises:
+            NetworkError: If unable to retrieve uptime
+        """
+        try:
+            uptime = self.conn.send_command("uptime")
+
+            if uptime.failed:
+                logger.error("Failed to get uptime: %s", uptime.result)
+                raise NetworkError("Unable to retrieve uptime")
+
+            uptime_result = uptime.result.strip()
+            if " " in uptime_result:
+                uptime_value = uptime_result.split(" ")[0]  # Get first part before space
+            else:
+                uptime_value = uptime_result[:8]  # Fallback to first 8 chars
+
+            logger.debug("uptime: %s", uptime_value)
+            return uptime_value
+
+        except NetworkError:
+            raise
+        except Exception as e:
+            logger.error("Unexpected error getting uptime: %s", str(e))
+            raise NetworkError(f"Uptime retrieval failed: {str(e)}")
 
     def get_sysinfo(self) -> dict:
         """Get system info and return it as a list|dict.
 
-        Return:
+        Returns:
             dict: System parameters dictionary
+
+        Raises:
+            NetworkError: If unable to communicate with device
+            ParseError: If unable to parse device response
         """
-        sysinfo = self.conn.send_command("show system-information")
-        return_values: Any = list(
-            sysinfo.ttp_parse_output(template="ttp_templates/system-information.txt")
-        )[0]
-        logger.debug("get_sysinfo function: %s", return_values)
-        return return_values
+        try:
+            sysinfo = self.conn.send_command("show system-information")
+
+            if sysinfo.failed:
+                raise NetworkError(f"Command failed: {sysinfo.result}")
+
+            return_values: Any = list(sysinfo.ttp_parse_output(template="ttp_templates/system-information.txt"))
+
+            if not return_values or not return_values[0]:
+                raise ParseError("Failed to parse system information output")
+
+            system_info = return_values[0]
+            logger.debug("get_sysinfo function: %s", system_info)
+            return system_info
+
+        except (NetworkError, ParseError):
+            raise
+        except Exception as e:
+            logger.error("Failed to get system info: %s", str(e))
+            raise NetworkError(f"System info retrieval failed: {str(e)}")
 
     def get_mgmt_ip(self) -> list[dict]:
-        """Get current management ip info."""
-        ip_mgmt_info = self.conn.send_command("show ifaces")
-        return_values: Any = list(
-            ip_mgmt_info.ttp_parse_output(template="ttp_templates/show_ifaces.txt")
-        )[0]
-        logger.debug("get_mgmt_ip function: %s", return_values)
-        return return_values
+        """Get current management ip info.
+
+        Returns:
+            list[dict]: Management interface information
+
+        Raises:
+            NetworkError: If unable to retrieve interface information
+            ParseError: If unable to parse response
+        """
+        try:
+            ip_mgmt_info = self.conn.send_command("show ifaces")
+
+            if ip_mgmt_info.failed:
+                raise NetworkError(f"Command failed: {ip_mgmt_info.result}")
+
+            return_values: Any = list(ip_mgmt_info.ttp_parse_output(template="ttp_templates/show_ifaces.txt"))
+
+            if not return_values or not return_values[0]:
+                raise ParseError("Failed to parse interface information")
+
+            logger.debug("get_mgmt_ip function: %s", return_values[0])
+            return return_values[0]
+
+        except (NetworkError, ParseError):
+            raise
+        except Exception as e:
+            logger.error("Error getting management IP: %s", str(e))
+            raise NetworkError(f"Management IP retrieval failed: {str(e)}")
 
     def get_ports(self) -> list[dict]:
         """Get status of ports, and return it as a list|dict.
 
         Returns:
-            list|dict: Status of all ports
+            list[dict]: Status of all ports
+
+        Raises:
+            NetworkError: If unable to retrieve port information
+            ParseError: If unable to parse port data
         """
-        status_ports = self.conn.send_command("show port")
-        first_parse: Any = list(
-            status_ports.ttp_parse_output(template="ttp_templates/ports.txt")
-        )
-        return_values = first_parse[0][2:]
-        for keys in return_values:
-            keys["port"] = int(keys["port"][4:])
-            keys["vid"] = int(keys["vid"])
-            if keys["link"] == "UP":
-                keys["link"] = True
-            else:
-                keys["link"] = False
-            if keys["alarm"] == "ALARM":
-                keys["alarm"] = True
-            elif keys["alarm"] == "None":
-                keys["alarm"] = True
-            else:
-                keys["alarm"] = False
-        logger.debug("get_ports function: %s", return_values)
-        return return_values
+        try:
+            status_ports = self.conn.send_command("show port")
+
+            if status_ports.failed:
+                raise NetworkError(f"Command failed: {status_ports.result}")
+
+            first_parse: Any = list(status_ports.ttp_parse_output(template="ttp_templates/ports.txt"))
+
+            if not first_parse or len(first_parse[0]) < 3:
+                raise ParseError("Failed to parse port information or no ports found")
+
+            return_values = first_parse[0][2:]
+
+            for keys in return_values:
+                try:
+                    keys["port"] = int(keys["port"][4:])
+                    keys["vid"] = int(keys["vid"])
+                    if keys["link"] == "UP":
+                        keys["link"] = True
+                    else:
+                        keys["link"] = False
+                    if keys["alarm"] == "ALARM":
+                        keys["alarm"] = True
+                    elif keys["alarm"] == "None":
+                        keys["alarm"] = True
+                    else:
+                        keys["alarm"] = False
+                except (ValueError, KeyError) as e:
+                    logger.warning("Error processing port data: %s", str(e))
+
+            logger.debug("get_ports function: %s", return_values)
+            return return_values
+
+        except (NetworkError, ParseError):
+            raise
+        except Exception as e:
+            logger.error("Error getting port status: %s", str(e))
+            raise NetworkError(f"Port status retrieval failed: {str(e)}")
 
     def get_frnt(self) -> list | dict:
         """Get status of ports, and returns it as a list|dict.
 
         Returns:
             list|dict: Status of all ports
+
+        Raises:
+            NetworkError: If unable to retrieve FRNT information
         """
-        status_ports = self.conn.send_command("show frnt")
-        return_values: Any = list(
-            status_ports.ttp_parse_output(template="ttp_templates/show_frnt.txt")
-        )[0]
-        logger.debug("get_ports function: %s", status_ports.result)
-        return return_values
+        try:
+            status_ports = self.conn.send_command("show frnt")
+
+            if status_ports.failed:
+                raise NetworkError(f"Command failed: {status_ports.result}")
+
+            return_values: Any = list(status_ports.ttp_parse_output(template="ttp_templates/show_frnt.txt"))[0]
+            logger.debug("get_frnt function: %s", status_ports.result)
+            return return_values
+
+        except NetworkError:
+            raise
+        except Exception as e:
+            logger.error("Error getting FRNT status: %s", str(e))
+            raise NetworkError(f"FRNT status retrieval failed: {str(e)}")
 
     def set_frtn(self, ports: tuple = (1, 2)) -> None:
-        """Toggle the FRNT Ring."""
-        if ports == (0):
-            self.conn.send_config("no frnt 1")
-            logger.debug("set_frnt function: disabling frnt")
-        else:
-            portstr = ",".join(str(x) for x in ports)
-            self.conn.send_config(f"frnt 1 ring-ports {portstr}")
-            logger.debug("set_frnt function: frnt set on port %s", portstr)
+        """Toggle the FRNT Ring.
+
+        Args:
+            ports (tuple): Ports to configure for FRNT ring
+
+        Raises:
+            NetworkError: If configuration fails
+        """
+        try:
+            if ports == (0):
+                result = self.conn.send_config("no frnt 1")
+                if result.failed:
+                    raise ConfigurationError(f"Failed to disable FRNT: {result.result}")
+                logger.debug("set_frnt function: disabling frnt")
+            else:
+                portstr = ",".join(str(x) for x in ports)
+                result = self.conn.send_config(f"frnt 1 ring-ports {portstr}")
+                if result.failed:
+                    raise ConfigurationError(f"Failed to set FRNT ports: {result.result}")
+                logger.debug("set_frnt function: frnt set on port %s", portstr)
+
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            logger.error("Error configuring FRNT: %s", str(e))
+            raise NetworkError(f"FRNT configuration failed: {str(e)}")
 
     def set_focal(self, member: bool = True) -> None:
-        """Set member on the FRNT Ring."""
-        if member:
-            self.conn.send_config("frnt 1 no focal-point")
-            logger.debug("set_focal function: member")
-        else:
-            self.conn.send_config("frnt 1 focal-point")
-            logger.debug("set_focal function: master")
+        """Set member on the FRNT Ring.
+
+        Args:
+            member (bool): True for member mode, False for focal point
+
+        Raises:
+            NetworkError: If configuration fails
+        """
+        try:
+            if member:
+                result = self.conn.send_config("frnt 1 no focal-point")
+                if result.failed:
+                    raise ConfigurationError(f"Failed to set member mode: {result.result}")
+                logger.debug("set_focal function: member")
+            else:
+                result = self.conn.send_config("frnt 1 focal-point")
+                if result.failed:
+                    raise ConfigurationError(f"Failed to set focal point: {result.result}")
+                logger.debug("set_focal function: master")
+
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            logger.error("Error setting focal mode: %s", str(e))
+            raise NetworkError(f"Focal configuration failed: {str(e)}")
 
     def set_alarm(self, alarm: list[bool]) -> None:
         """Configure alarm when link down for interfaces in list.
@@ -176,160 +436,309 @@ class Westermo:
 
         Args:
             alarm (list): interfaces with alarm on or off
-        """
-        port_list = ""
-        for cnt, val in enumerate(alarm):
-            if val is True:
-                if port_list == "":
-                    port_list = str(cnt + 1)
-                else:
-                    port_list += "," + str(cnt + 1)
 
-        self.conn.send_config("alarm no action 1")  # unset alarmaction 1
-        self.conn.send_config("alarm no trigger 1")  # unset alarmtrigger 1
-        self.conn.send_config(
-            f"alarm trigger 1 link-alarm condition low port {port_list}"
-        )
-        self.conn.send_config("alarm action 1 target led,log,digout")
-        logger.debug("set_alarm function: set alarm on ifaces %s ON", port_list)
+        Raises:
+            NetworkError: If configuration fails
+        """
+        enabled_ports = [str(i + 1) for i, enabled in enumerate(alarm) if enabled]
+        port_list = ",".join(enabled_ports)
+
+        logger.info("Configuring alarms for ports: %s", port_list or "none")
+
+        try:
+            clear_commands = ["alarm no action 1", "alarm no trigger 1"]
+
+            for cmd in clear_commands:
+                result = self.conn.send_config(cmd)
+                if result.failed:
+                    logger.warning("Failed to clear alarm config: %s", result.result)
+
+            if port_list:
+                alarm_commands = [
+                    f"alarm trigger 1 link-alarm condition low port {port_list}",
+                    "alarm action 1 target led,log,digout",
+                ]
+
+                for cmd in alarm_commands:
+                    result = self.conn.send_config(cmd)
+                    if result.failed:
+                        raise ConfigurationError(f"Alarm configuration failed: {result.result}")
+
+            logger.debug("set_alarm function: set alarm on ifaces %s ON", port_list)
+
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            logger.error("Error configuring alarms: %s", str(e))
+            raise NetworkError(f"Alarm configuration failed: {str(e)}")
 
     def set_mgmt_ip(self, ip_add: str) -> bool:
         """Change the management ip-address of the switch to (ip).
 
         Args:
             ip_add (str): IP Address to set
+
         Returns:
-            None
+            bool: True if successful, False otherwise
+
+        Raises:
+            ValidationError: If IP address format is invalid
         """
         try:
-            ip_address(ip_add)
-        except ValueError:
+            validated_ip, ip_with_cidr = InputValidator.validate_ip_with_cidr(ip_add)
+
+            logger.debug("set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24")
+            result = self.conn.send_config("iface vlan1 inet static address 192.168.2.200/24")
+            if result.failed:
+                logger.error("Failed to set primary IP: %s", result.result)
+                return False
+
+            self.conn.send_config("exit")
+
+            logger.debug("set_mgmt_ip function: removing all secondary ip")
+            interactive_result = self.conn.send_interactive(
+                [
+                    (
+                        "iface vlan1 inet static no address secondary",
+                        "Remove all secondary IP addresses, are you sure (y/N)? ",
+                        False,
+                    ),
+                    ("y", "", False),
+                ],
+                privilege_level="configuration",
+            )
+
+            if interactive_result.failed:
+                logger.error("Failed to remove secondary IPs: %s", interactive_result.result)
+                return False
+
+            self.conn.send_config("exit")
+
+            logger.debug("set_mgmt_ip function: setting vlan1 secondary to %s", ip_with_cidr)
+            result = self.conn.send_config(f"iface vlan1 inet static address {ip_with_cidr} secondary")
+            if result.failed:
+                logger.error("Failed to set secondary IP: %s", result.result)
+                return False
+
+            return True
+
+        except ValidationError as e:
+            logger.warning("IP address validation failed: %s", str(e))
+            raise
+        except Exception as e:
+            logger.error("Error setting management IP: %s", str(e))
             return False
-        logger.debug("set_mgmt_ip function: setting vlan1 to static 192.168.2.200/24}")
-        self.conn.send_config("iface vlan1 inet static address 192.168.2.200/24")
-        self.conn.send_config("exit")
-        logger.debug("set_mgmt_ip function: removing all secondary ip")
-        self.conn.send_interactive(
-            [
-                (
-                    "iface vlan1 inet static no address secondary",
-                    "Remove all secondary IP addresses, are you sure (y/N)? ",
-                    False,
-                ),
-                ("y", "", False),
-            ],
-            privilege_level="configuration",
-        )
-        self.conn.send_config("exit")
-        logger.debug("set_mgmt_ip function: setting vlan1 secondary to %s", ip_add)
-        self.conn.send_config(f"iface vlan1 inet static address {ip_add}/24 secondary")
-        return True
 
     def set_hostname(self, hostname: str) -> None:
         """Change the hostname of the switch.
 
         Args:
             hostname (str): Hostname to switch to
+
+        Raises:
+            ValidationError: If hostname is invalid
+            NetworkError: If configuration fails
         """
-        self.conn.send_config(f"system hostname {hostname}")
-        logger.debug("conf_hostname function: set %s", hostname)
+        try:
+            validated_hostname = InputValidator.validate_hostname(hostname)
+
+            result = self.conn.send_config(f"system hostname {validated_hostname}")
+            if result.failed:
+                raise ConfigurationError(f"Failed to set hostname: {result.result}")
+
+            logger.debug("conf_hostname function: set %s", validated_hostname)
+
+        except ValidationError as e:
+            logger.warning("Hostname validation failed: %s", str(e))
+            raise
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            logger.error("Error setting hostname: %s", str(e))
+            raise NetworkError(f"Hostname configuration failed: {str(e)}")
 
     def set_interactive(self, interactive: bool = True) -> None:
         """Set the interactive mode on the switch.
 
         This enables paging, but also lets you structure commands fully
+
+        Args:
+            interactive (bool): True for interactive mode, False for batch mode
         """
-        if interactive:
-            self.conn.send_command("interactive")
-            logger.debug("Interactive mode set")
-        else:
-            self.conn.send_command("batch")
-            logger.debug("Batch mode set")
+        try:
+            if interactive:
+                result = self.conn.send_command("interactive")
+                if result.failed:
+                    logger.warning("Failed to set interactive mode: %s", result.result)
+                else:
+                    logger.debug("Interactive mode set")
+            else:
+                result = self.conn.send_command("batch")
+                if result.failed:
+                    logger.warning("Failed to set batch mode: %s", result.result)
+                else:
+                    logger.debug("Batch mode set")
+        except Exception as e:
+            logger.warning("Error setting interactive mode: %s", str(e))
 
     def set_location(self, location: str) -> None:
         """Change the location parameter of the switch.
 
         Args:
             location (str): location string to switch to
+
+        Raises:
+            ValidationError: If location format is invalid
+            NetworkError: If configuration fails
         """
-        if location == "":
-            self.conn.send_config("no system location")
-            logger.debug("set_location function: removing location")
-        else:
-            location = re.sub("[^a-zA-Z0-9 \n\\.]", "", location)
-            self.conn.send_config(f"system location '{location}'")
-            logger.debug("set_location function: set to: %s", location)
+        try:
+            if location == "":
+                result = self.conn.send_config("no system location")
+                if result.failed:
+                    raise ConfigurationError(f"Failed to remove location: {result.result}")
+                logger.debug("set_location function: removing location")
+            else:
+                if len(location) > 255:
+                    raise ValidationError("Location too long (max 255 characters)")
+
+                location = re.sub("[^a-zA-Z0-9 \n\\.]", "", location)
+                result = self.conn.send_config(f"system location '{location}'")
+                if result.failed:
+                    raise ConfigurationError(f"Failed to set location: {result.result}")
+                logger.debug("set_location function: set to: %s", location)
+
+        except (ValidationError, ConfigurationError):
+            raise
+        except Exception as e:
+            logger.error("Error setting location: %s", str(e))
+            raise NetworkError(f"Location configuration failed: {str(e)}")
 
     def factory_conf(self) -> None:
-        """Reset device to factory defaults."""
-        self.conn.send_interactive(
-            [("factory-reset", "=> Are you sure (y/N)?", False), ("y", "", False)]
-        )
-        logger.debug("factory_conf function: Factory defaults set")
+        """Reset device to factory defaults.
+
+        Raises:
+            NetworkError: If factory reset fails
+        """
+        try:
+            logger.warning("Initiating factory reset - this will erase all configuration")
+
+            result = self.conn.send_interactive([("factory-reset", "=> Are you sure (y/N)?", False), ("y", "", False)])
+
+            if result.failed:
+                raise ConfigurationError(f"Factory reset failed: {result.result}")
+
+            logger.critical("factory_conf function: Factory defaults set")
+
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            logger.error("Error during factory reset: %s", str(e))
+            raise NetworkError(f"Factory reset failed: {str(e)}")
 
     def save_run2startup(self) -> bool:
-        """Save the configuration from running to startup."""
-        response = self.conn.send_command("copy run start")
-        logger.debug("save_run2startup function: %s", response.result)
-        if response.result != "":
+        """Save the configuration from running to startup.
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            response = self.conn.send_command("copy run start")
+            logger.debug("save_run2startup function: %s", response.result)
+
+            if response.failed or response.result != "":
+                logger.error("Failed to save configuration: %s", response.result)
+                return False
+
+            logger.info("Configuration saved successfully")
+            return True
+
+        except Exception as e:
+            logger.error("Error saving configuration: %s", str(e))
             return False
-        return True
 
     def save_config(self) -> str:
         """Get the startup config and returns it as a decoded string.
 
         Returns:
-            config (str)
+            str: config string
         """
-        self.set_interactive(False)
-        config = self.conn.send_command("show startup-config").result
-        self.set_interactive(True)
-        return config
+        try:
+            self.set_interactive(False)
+            config = self.conn.send_command("show startup-config").result
+            self.set_interactive(True)
+            return config
+        except Exception as e:
+            logger.error("Error retrieving config: %s", str(e))
+            self.set_interactive(True)
+            return ""
 
     def compare_config(self) -> bool:
         """Compare the running and startup config and returns status.
 
         Returns:
-            status (bool): True = Match
-                           False = Mismatch
+            bool: True = Match, False = Mismatch
         """
-        self.set_interactive(False)
-        raw_startup = self.conn.send_command("show startup-config").result
-        parsed_startup = "".join(raw_startup.splitlines(keepends=True)[:-4]).rstrip()
-        raw_running = self.conn.send_command("show running-config").result
-        self.set_interactive(True)
-        if parsed_startup == raw_running:
-            logger.debug("compare_config function: True")
-            return True
-        logger.debug("compare_config function: False")
-        return False
+        try:
+            self.set_interactive(False)
+            raw_startup = self.conn.send_command("show startup-config").result
+            parsed_startup = "".join(raw_startup.splitlines(keepends=True)[:-4]).rstrip()
+            raw_running = self.conn.send_command("show running-config").result
+            self.set_interactive(True)
+
+            if parsed_startup == raw_running:
+                logger.debug("compare_config function: True")
+                return True
+            logger.debug("compare_config function: False")
+            return False
+
+        except Exception as e:
+            logger.error("Error comparing configurations: %s", str(e))
+            self.set_interactive(True)
+            return False
 
     def get_alarm_log(self) -> list | dict:
         """Return the alarm log as a list | dict.
 
         Returns:
-            eventlog (list | dict)
+            list|dict: eventlog
+
+        Raises:
+            NetworkError: If unable to retrieve alarm log
         """
-        logger.debug("get_alarm_log function: ")
-        returnobj = self.conn.send_command("show alarm")
-        return_values: Any = list(
-            returnobj.ttp_parse_output(template="ttp_templates/alarm_log.txt")
-        )[0]
-        logger.debug(return_values)
-        return return_values
+        try:
+            logger.debug("get_alarm_log function: ")
+            returnobj = self.conn.send_command("show alarm")
+
+            if returnobj.failed:
+                raise NetworkError(f"Command failed: {returnobj.result}")
+
+            return_values: Any = list(returnobj.ttp_parse_output(template="ttp_templates/alarm_log.txt"))[0]
+            logger.debug(return_values)
+            return return_values
+
+        except NetworkError:
+            raise
+        except Exception as e:
+            logger.error("Error getting alarm log: %s", str(e))
+            raise NetworkError(f"Alarm log retrieval failed: {str(e)}")
 
     def get_event_log(self) -> str:
         """Return the event list as a list | dict.
 
         Returns:
-            log (str)
+            str: log
         """
-        logger.debug("get_event_log function: ")
-        self.set_interactive(False)
-        return_values = self.conn.send_command("alarm log").result
-        self.set_interactive(True)
-        logger.debug(return_values)
-        return return_values
+        try:
+            logger.debug("get_event_log function: ")
+            self.set_interactive(False)
+            return_values = self.conn.send_command("alarm log").result
+            self.set_interactive(True)
+            logger.debug(return_values)
+            return return_values
+        except Exception as e:
+            logger.error("Error getting event log: %s", str(e))
+            self.set_interactive(True)
+            return ""
 
 
 if __name__ == "__main__":
@@ -340,29 +749,15 @@ if __name__ == "__main__":
         "auth_password": "westermo",
         "platform": "westermo_weos",
         "transport": "telnet",
-        # "host": "192.168.2.200",
-        # "auth_username": "admin",
-        # "auth_password": "westermo",
-        # "auth_strict_key": False,
-        # "platform": "westermo_weos",
     }
-    # alarms = [False,False,False,False,False,False,False,True,False,True]
-    with Westermo(**SWITCH) as switch:
-        switch.set_interactive()
-        switch.get_sysinfo()
-        switch.get_uptime()
-        # switch.get_ports()
-        # switch.save_config()
-        # switch.compare_config()
-        # switch.set_alarm(alarms)
-        # switch.set_mgmt_ip('192.168.0.202')
-        # switch.get_mgmt_ip()
-        # switch.get_alarm_log()
-        # switch.get_event_log()
-        # switch.factory_conf()
-        # switch.set_frtn()
-        # switch.conn.send_config('exit')
-        # switch.set_focal(member=True)
-        # switch.get_frnt()
-        # switch.save_run2startup()
-        input()
+
+    try:
+        with Westermo(**SWITCH) as switch:
+            switch.set_interactive()
+            switch.get_sysinfo()
+            switch.get_uptime()
+            input()
+    except WestermoError as e:
+        logger.error("Westermo operation failed: %s", str(e))
+    except Exception as e:
+        logger.error("Unexpected error: %s", str(e))
