@@ -82,9 +82,16 @@ class Handler:
     ) -> None:
         """Initialize the class."""
         self.tel_port = tel_port
-        self.com = Serial(
-            port=ser_port, baudrate=baud, timeout=timeout, xonxoff=xonxoff
-        )
+
+        # Try to initialize serial connection, handle gracefully if device not found
+        try:
+            self.com = Serial(port=ser_port, baudrate=baud, timeout=timeout, xonxoff=xonxoff)
+            logger.info(f"Serial connection established on {ser_port}")
+        except (SerialException, FileNotFoundError) as e:
+            logger.warning(f"Serial device {ser_port} not available: {e}")
+            logger.info("Running without serial device - telnet bridge will not function")
+            self.com = None
+
         self.clist: list = []
         self.start_new_listener()
 
@@ -98,6 +105,10 @@ class Handler:
 
     def run(self) -> None:
         """Check for incoming telnet connections and start interactions."""
+        # If no serial connection available, just return
+        if self.com is None:
+            return
+
         for tcp_conn in self.clist[:]:
             if tcp_conn.com.isOpen():
                 # pull data from serial and send it to tcp if possible

@@ -171,8 +171,14 @@ class Westermo:
         logger.info("Initializing Westermo connection: %s", safe_params)
 
         self.DEVICE = kwargs
-        self.telnet2serlib()
-        sleep(0.2)
+
+        # Only start telnet2serial bridge if we're using telnet transport
+        if kwargs.get("transport") == "telnet" and kwargs.get("port") == 2323:
+            logger.info("Starting telnet-to-serial bridge...")
+            self.telnet2serlib()
+            sleep(0.2)
+        else:
+            logger.info("Direct connection mode - skipping telnet-to-serial bridge")
 
     def __enter__(self):
         """Run commands on class enter."""
@@ -212,6 +218,7 @@ class Westermo:
                 connections.run()
         except Exception as e:
             logger.error("Telnet bridge error: %s", str(e))
+            logger.warning("Continuing without telnet bridge...")
 
     def get_uptime(self) -> str:
         """Get the uptime of the switch.
